@@ -74,17 +74,7 @@ pipe_url = file_to_data_url(pipe_file, DEFAULT_PIPE)
 bg_url = file_to_data_url(bg_file, DEFAULT_BG)
 music_url = file_to_data_url(music_file, None)
 
-# Create Start button (single, fixed top-right)
-start_button_html = """
-<div class="top-right">
-  <button id="startBtn" style="background:#ff4757;color:#fff;border:none;padding:10px 14px;border-radius:10px;font-weight:700;box-shadow:0 4px 10px rgba(0,0,0,0.4);">
-    START / RESTART
-  </button>
-</div>
-"""
-st.components.v1.html(start_button_html, height=0)
-
-# Build the embedded HTML + JS game. We pass data URLs to JS via template.
+# Build the embedded HTML + JS game. Start button is INCLUDED inside this HTML to avoid cross-frame access problems.
 game_html = f"""
 <!doctype html>
 <html>
@@ -99,11 +89,14 @@ game_html = f"""
   #tips {{ position:absolute; bottom:12px; left:50%; transform:translateX(-50%); color:#fff; background:rgba(0,0,0,0.45); padding:8px 12px; border-radius:8px; font-family:sans-serif; z-index:5; }}
   .smallBtn {{ padding:6px 10px; border-radius:8px; border:none; font-weight:700; }}
   #controls {{ position: absolute; top:54px; right:10px; z-index:6; }}
+  .top-right {{ position: absolute; top:12px; right:12px; z-index:9999; }}
+  .startBtn {{ background:#ff4757;color:#fff;border:none;padding:10px 14px;border-radius:10px;font-weight:700;box-shadow:0 4px 10px rgba(0,0,0,0.4);}}
 </style>
 </head>
 <body>
 <div id="gameWrap">
   <div style="position:relative; width:95%; max-width:900px;">
+    <div class="top-right"><button id="startBtn" class="startBtn">START / RESTART</button></div>
     <div id="overlay"></div>
     <div id="scoreBox">Score: <span id="score">0</span> | Best: <span id="best">0</span></div>
     <div id="controls">
@@ -237,7 +230,6 @@ class Game {{
       localStorage.setItem(this.bestKey, String(this.best));
       document.getElementById('best').innerText = this.best;
     }}
-    // show simple game over text overlay for a bit
     ctx.save();
     ctx.fillStyle = 'rgba(0,0,0,0.5)';
     ctx.fillRect(0,0,this.w,this.h);
@@ -252,7 +244,6 @@ class Game {{
 
   update(dt) {{
     this.elapsed += dt;
-    // timer end?
     if (durationMinutes > 0) {{
       const elapsedMin = (performance.now() - this.startTime) / 60000;
       if (elapsedMin >= durationMinutes) {{
@@ -260,29 +251,22 @@ class Game {{
         return;
       }}
     }}
-    // spawn pipes
     this.pipeTimer += dt;
     if (this.pipeTimer > this.pipeInterval) {{
       this.pipeTimer = 0;
-      // random gap center
       const margin = Math.floor(this.h * 0.12);
       const center = Math.floor(Math.random() * (this.h - margin*2 - this.spawnGap) + margin + this.spawnGap/2);
       this.pipes.push({{ x: this.spawnX, center }});
     }}
-    // move pipes
     for (let p of this.pipes) {{
       p.x -= this.speed * (dt/1000);
     }}
-    // remove passed pipes
     if (this.pipes.length && this.pipes[0].x + 100 < 0) this.pipes.shift();
 
-    // player physics
     this.player.vy += this.g * dt;
     this.player.y += this.player.vy * dt;
-    // rotation for visual
     this.player.rotation = Math.max(-0.6, Math.min(1.0, this.player.vy / 6));
 
-    // collisions with ground/ceiling
     if (this.player.y + this.player.vh/2 >= this.h) {{
       this.player.y = this.h - this.player.vh/2;
       this.end();
@@ -293,24 +277,20 @@ class Game {{
       this.player.vy = 0;
     }}
 
-    // collision with pipes + scoring
     for (let p of this.pipes) {{
       const pipeW = Math.floor(this.w * 0.09);
       const pipeX = p.x;
       const gapTop = p.center - (this.spawnGap/2);
       const gapBottom = p.center + (this.spawnGap/2);
-      // scoring: when pipe passes player.x
       if (!p.scored && pipeX + pipeW < this.player.x) {{
         p.scored = true;
         this.score += 1;
         document.getElementById('score').innerText = this.score;
       }}
-      // collision box approx
       const px = this.player.x;
       const py = this.player.y;
       const pw = this.player.vw;
       const ph = this.player.vh;
-      // top pipe rect
       const topRect = {{x: pipeX, y:0, w: pipeW, h: gapTop}};
       const bottomRect = {{x: pipeX, y: gapBottom, w: pipeW, h: this.h - gapBottom}};
       if (rectCircleCollide(topRect, px, py, pw, ph) || rectCircleCollide(bottomRect, px, py, pw, ph)) {{
@@ -321,7 +301,6 @@ class Game {{
   }}
 
   drawIntro() {{
-    // show static scene when not running
     this.drawScene();
     ctx.save();
     ctx.fillStyle = 'rgba(0,0,0,0.35)';
@@ -335,18 +314,13 @@ class Game {{
 
   draw() {{
     this.drawScene();
-    // draw pipes
     for (let p of this.pipes) {{
       const pipeW = Math.floor(this.w * 0.09);
-      const scale = pipeW / images.pipe.width;
-      // top
       const topH = p.center - (this.spawnGap/2);
       ctx.drawImage(images.pipe, p.x, 0, pipeW, topH);
-      // bottom
       const bottomY = p.center + (this.spawnGap/2);
       ctx.drawImage(images.pipe, p.x, bottomY, pipeW, this.h - bottomY);
     }}
-    // draw player (centered)
     ctx.save();
     ctx.translate(this.player.x, this.player.y);
     ctx.rotate(this.player.rotation);
@@ -357,23 +331,18 @@ class Game {{
   }}
 
   drawScene() {{
-    // background tiling or cover
     ctx.clearRect(0,0,this.w,this.h);
-    // draw background stretched to cover
     ctx.drawImage(images.bg, 0, 0, this.w, this.h);
   }}
 
   flap() {{
     if (!this.running) return;
     this.player.vy = this.jumpStrength;
-    // small sound effect could be added later
   }}
 }}
 
 function rectCircleCollide(rect, cx, cy, cw, ch) {{
-  // approximate player as circle radius = max(cw,ch)/2
   const r = Math.max(cw, ch) * 0.45;
-  // find closest point on rect to circle center
   const closestX = Math.max(rect.x, Math.min(cx, rect.x + rect.w));
   const closestY = Math.max(rect.y, Math.min(cy, rect.y + rect.h));
   const dx = cx - closestX;
@@ -383,12 +352,10 @@ function rectCircleCollide(rect, cx, cy, cw, ch) {{
 
 let initialized = false;
 loadAssets().then(() => {{
-  // scale player sizes depending on canvas
   const g = new Game();
   game = g;
   initialized = true;
 
-  // wire UI buttons (start button outside iFrame)
   document.getElementById('startBtn').addEventListener('click', () => {{
     g.start();
     document.getElementById('score').innerText = '0';
@@ -411,20 +378,15 @@ loadAssets().then(() => {{
     }}
   }});
 
-  // controls: mouse / touch / keyboard
-  let pointerDown = false;
-  canvas.addEventListener('mousedown', (e) => {{ pointerDown = true; g.flap(); }});
-  canvas.addEventListener('mouseup', (e) => {{ pointerDown = false; }});
+  canvas.addEventListener('mousedown', (e) => {{ g.flap(); }});
   canvas.addEventListener('touchstart', (e) => {{ e.preventDefault(); g.flap(); }}, {{passive:false}});
   window.addEventListener('keydown', (e) => {{
     if (e.code === 'Space') {{
       e.preventDefault();
-      if(!g.running && !g.over) {{ /* do nothing until start */ }}
       g.flap();
     }}
   }});
 
-  // initial draw
   g.drawIntro();
 }})
 .catch(err => {{
@@ -436,14 +398,12 @@ loadAssets().then(() => {{
   ctx.fillText('Failed to load assets', 20, 40);
 }});
 
-// If user resizes container size in streamlit, we should inform the game to resize internal width/height
 window.addEventListener('resize', () => {{
   if (game) {{
     game.w = canvas.width;
     game.h = canvas.height;
   }}
 }});
-
 </script>
 </body>
 </html>
