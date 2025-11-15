@@ -1,0 +1,458 @@
+import streamlit as st
+import base64
+import textwrap
+
+st.set_page_config(page_title="Kitaabon Ka Jaadu - Flappy", layout="wide")
+
+st.markdown("<style>body {background: #111; color: #fff;} .top-right {position: fixed; top: 12px; right: 12px; z-index: 9999;}</style>", unsafe_allow_html=True)
+
+st.title("Flappy-style Tap-to-Jump Game — Streamlit Web App")
+st.write("Upload sprites (player, obstacle), background, and optional music. Tap / Click to jump. Controls: mouse/touch/space.")
+
+col1, col2 = st.columns([1,2])
+
+with col1:
+    st.header("Assets (upload)")
+    player_file = st.file_uploader("Player sprite (PNG/JPG, transparent OK)", type=["png","jpg","jpeg"], key="player")
+    pipe_file = st.file_uploader("Obstacle pipe sprite (PNG/JPG)", type=["png","jpg","jpeg"], key="pipe")
+    bg_file = st.file_uploader("Background image (PNG/JPG)", type=["png","jpg","jpeg"], key="bg")
+    music_file = st.file_uploader("Background music (MP3/OGG) — optional", type=["mp3","ogg","wav"], key="music")
+    duration_min = st.number_input("Auto end after (minutes)? 0 = no timer", min_value=0, value=0, step=1)
+    show_tips = st.checkbox("Show quick tips overlay", value=True)
+
+with col2:
+    st.header("Game controls")
+    st.markdown("""
+    - Top-right single **Start / Restart** button (fixed).  
+    - Tap/click/press **space** to jump.  
+    - Touch support included.  
+    - Best score saved in browser localStorage.  
+    - Use your uploaded images; if none provided, defaults used.
+    """)
+
+# Utility: convert uploaded files to data URLs
+def file_to_data_url(uploaded_file, default_data_url=None):
+    if uploaded_file is None:
+        return default_data_url
+    raw = uploaded_file.read()
+    b64 = base64.b64encode(raw).decode("utf-8")
+    mime = "image/png"
+    fname = uploaded_file.name.lower()
+    if fname.endswith(".jpg") or fname.endswith(".jpeg"):
+        mime = "image/jpeg"
+    elif fname.endswith(".mp3"):
+        mime = "audio/mpeg"
+    elif fname.endswith(".ogg"):
+        mime = "audio/ogg"
+    elif fname.endswith(".wav"):
+        mime = "audio/wav"
+    return f"data:{mime};base64,{b64}"
+
+# Default small sprites (data URLs) — simple colored rectangles if user doesn't upload
+DEFAULT_PLAYER = "data:image/svg+xml;base64," + base64.b64encode("""
+<svg xmlns='http://www.w3.org/2000/svg' width='64' height='48'>
+  <rect width='64' height='48' rx='8' fill='#ffcc00'/>
+  <circle cx='46' cy='16' r='6' fill='#ffffff'/>
+</svg>
+""".encode()).decode()
+
+DEFAULT_PIPE = "data:image/svg+xml;base64," + base64.b64encode("""
+<svg xmlns='http://www.w3.org/2000/svg' width='80' height='400'>
+  <rect width='80' height='400' fill='#30a14e'/>
+</svg>
+""".encode()).decode()
+
+DEFAULT_BG = "data:image/svg+xml;base64," + base64.b64encode("""
+<svg xmlns='http://www.w3.org/2000/svg' width='800' height='600'>
+  <rect width='100%' height='100%' fill='#87ceeb'/>
+  <circle cx='700' cy='100' r='50' fill='#fff59d'/>
+</svg>
+""".encode()).decode()
+
+player_url = file_to_data_url(player_file, DEFAULT_PLAYER)
+pipe_url = file_to_data_url(pipe_file, DEFAULT_PIPE)
+bg_url = file_to_data_url(bg_file, DEFAULT_BG)
+music_url = file_to_data_url(music_file, None)
+
+# Create Start button (single, fixed top-right)
+start_button_html = """
+<div class="top-right">
+  <button id="startBtn" style="background:#ff4757;color:#fff;border:none;padding:10px 14px;border-radius:10px;font-weight:700;box-shadow:0 4px 10px rgba(0,0,0,0.4);">
+    START / RESTART
+  </button>
+</div>
+"""
+st.components.v1.html(start_button_html, height=0)
+
+# Build the embedded HTML + JS game. We pass data URLs to JS via template.
+game_html = f"""
+<!doctype html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+  html,body {{ margin:0; height:100%; background:#000; }}
+  #gameWrap {{ display:flex; align-items:center; justify-content:center; height:80vh; }}
+  canvas {{ background:#000; border-radius:8px; box-shadow: 0 8px 20px rgba(0,0,0,0.6); touch-action: none; }}
+  #overlay {{ position:absolute; top:10px; left:10px; color:#fff; font-family:sans-serif; font-weight:700; z-index:5; }}
+  #scoreBox {{ position:absolute; top:10px; right:10px; color:#fff; font-family:sans-serif; font-weight:700; z-index:5; }}
+  #tips {{ position:absolute; bottom:12px; left:50%; transform:translateX(-50%); color:#fff; background:rgba(0,0,0,0.45); padding:8px 12px; border-radius:8px; font-family:sans-serif; z-index:5; }}
+  .smallBtn {{ padding:6px 10px; border-radius:8px; border:none; font-weight:700; }}
+  #controls {{ position: absolute; top:54px; right:10px; z-index:6; }}
+</style>
+</head>
+<body>
+<div id="gameWrap">
+  <div style="position:relative; width:95%; max-width:900px;">
+    <div id="overlay"></div>
+    <div id="scoreBox">Score: <span id="score">0</span> | Best: <span id="best">0</span></div>
+    <div id="controls">
+      <button id="musicToggle" class="smallBtn">Music ON</button>
+      <button id="shareBtn" class="smallBtn">Share Score</button>
+    </div>
+    <canvas id="c"></canvas>
+    <div id="tips" style="display:{'block' if show_tips else 'none'}">
+      Tap / Click / Space to jump • Top-right START / RESTART to (re)start • Best score saved locally
+    </div>
+  </div>
+</div>
+
+<script>
+const playerURL = "{player_url}";
+const pipeURL = "{pipe_url}";
+const bgURL = "{bg_url}";
+const musicURL = {('"' + music_url + '"') if music_url else 'null'};
+const durationMinutes = {int(duration_min)};
+
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+
+let DPR = window.devicePixelRatio || 1;
+function resizeCanvas() {{
+  const containerWidth = Math.min(window.innerWidth*0.95, 900);
+  const containerHeight = Math.min(window.innerHeight*0.72, 700);
+  canvas.style.width = containerWidth + 'px';
+  canvas.style.height = containerHeight + 'px';
+  canvas.width = Math.floor(containerWidth * DPR);
+  canvas.height = Math.floor(containerHeight * DPR);
+}}
+resizeCanvas();
+window.addEventListener('resize', () => {{ DPR = window.devicePixelRatio || 1; resizeCanvas(); draw(); }});
+
+let images = {{}};
+function loadImage(url) {{
+  return new Promise((res, rej) => {{
+    const img = new Image();
+    img.onload = () => res(img);
+    img.onerror = rej;
+    img.src = url;
+  }});
+}}
+
+async function loadAssets() {{
+  images.bg = await loadImage(bgURL);
+  images.player = await loadImage(playerURL);
+  images.pipe = await loadImage(pipeURL);
+}}
+
+let game = null;
+
+class Game {{
+  constructor() {{
+    this.w = canvas.width;
+    this.h = canvas.height;
+    this.reset();
+    this.bind();
+    this.bestKey = 'flappy_best_score_kitaabon';
+    const b = localStorage.getItem(this.bestKey);
+    this.best = b ? parseInt(b) : 0;
+    document.getElementById('best').innerText = this.best;
+    this.audio = null;
+    if (musicURL) {{
+      this.audio = new Audio(musicURL);
+      this.audio.loop = true;
+      this.audio.volume = 0.5;
+      this.audio.play().catch(()=>{{}}); // autoplay may be blocked; toggled later
+      this.musicOn = true;
+    }} else {{
+      this.musicOn = false;
+      document.getElementById('musicToggle').style.display = 'none';
+    }}
+  }}
+
+  reset() {{
+    this.w = canvas.width;
+    this.h = canvas.height;
+    this.player = {{
+      x: Math.floor(this.w * 0.2),
+      y: Math.floor(this.h/2),
+      vw: Math.floor(this.w * 0.07),
+      vh: Math.floor(this.w * 0.05),
+      vy: 0,
+      rotation: 0
+    }};
+    this.g = 0.0018 * this.h; // gravity scaled
+    this.jumpStrength = -0.45 * this.h;
+    this.pipes = [];
+    this.pipeTimer = 0;
+    this.pipeInterval = 1400; // ms between pipes
+    this.speed = 0.32 * this.w;
+    this.last = performance.now();
+    this.score = 0;
+    this.running = false;
+    this.over = false;
+    this.spawnGap = Math.floor(this.h * 0.28);
+    this.spawnX = this.w + 200;
+    this.elapsed = 0;
+    this.startTime = null;
+  }}
+
+  bind() {{
+    const step = (t) => {{
+      if (!this.running && !this.over) {{ this.drawIntro(); requestAnimationFrame(step); return; }}
+      const dt = Math.min(t - this.last, 40);
+      this.last = t;
+      if (this.running) this.update(dt);
+      this.draw();
+      if (!this.over) requestAnimationFrame(step);
+    }};
+    requestAnimationFrame(step);
+  }}
+
+  start() {{
+    this.reset();
+    this.running = true;
+    this.over = false;
+    this.last = performance.now();
+    this.startTime = performance.now();
+    if (this.audio && this.musicOn) this.audio.play().catch(()=>{{}});
+  }}
+
+  end() {{
+    this.over = true;
+    this.running = false;
+    if (this.audio) this.audio.pause();
+    if (this.score > this.best) {{
+      this.best = this.score;
+      localStorage.setItem(this.bestKey, String(this.best));
+      document.getElementById('best').innerText = this.best;
+    }}
+    // show simple game over text overlay for a bit
+    ctx.save();
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.fillRect(0,0,this.w,this.h);
+    ctx.fillStyle = '#fff';
+    ctx.font = (Math.floor(this.h*0.06)) + 'px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('Game Over — Score: ' + this.score, this.w/2, this.h/2 - 10);
+    ctx.font = (Math.floor(this.h*0.035)) + 'px sans-serif';
+    ctx.fillText('Press START to try again', this.w/2, this.h/2 + 40);
+    ctx.restore();
+  }}
+
+  update(dt) {{
+    this.elapsed += dt;
+    // timer end?
+    if (durationMinutes > 0) {{
+      const elapsedMin = (performance.now() - this.startTime) / 60000;
+      if (elapsedMin >= durationMinutes) {{
+        this.end();
+        return;
+      }}
+    }}
+    // spawn pipes
+    this.pipeTimer += dt;
+    if (this.pipeTimer > this.pipeInterval) {{
+      this.pipeTimer = 0;
+      // random gap center
+      const margin = Math.floor(this.h * 0.12);
+      const center = Math.floor(Math.random() * (this.h - margin*2 - this.spawnGap) + margin + this.spawnGap/2);
+      this.pipes.push({{ x: this.spawnX, center }});
+    }}
+    // move pipes
+    for (let p of this.pipes) {{
+      p.x -= this.speed * (dt/1000);
+    }}
+    // remove passed pipes
+    if (this.pipes.length && this.pipes[0].x + 100 < 0) this.pipes.shift();
+
+    // player physics
+    this.player.vy += this.g * dt;
+    this.player.y += this.player.vy * dt;
+    // rotation for visual
+    this.player.rotation = Math.max(-0.6, Math.min(1.0, this.player.vy / 6));
+
+    // collisions with ground/ceiling
+    if (this.player.y + this.player.vh/2 >= this.h) {{
+      this.player.y = this.h - this.player.vh/2;
+      this.end();
+      return;
+    }}
+    if (this.player.y - this.player.vh/2 <= 0) {{
+      this.player.y = this.player.vh/2;
+      this.player.vy = 0;
+    }}
+
+    // collision with pipes + scoring
+    for (let p of this.pipes) {{
+      const pipeW = Math.floor(this.w * 0.09);
+      const pipeX = p.x;
+      const gapTop = p.center - (this.spawnGap/2);
+      const gapBottom = p.center + (this.spawnGap/2);
+      // scoring: when pipe passes player.x
+      if (!p.scored && pipeX + pipeW < this.player.x) {{
+        p.scored = true;
+        this.score += 1;
+        document.getElementById('score').innerText = this.score;
+      }}
+      // collision box approx
+      const px = this.player.x;
+      const py = this.player.y;
+      const pw = this.player.vw;
+      const ph = this.player.vh;
+      // top pipe rect
+      const topRect = {{x: pipeX, y:0, w: pipeW, h: gapTop}};
+      const bottomRect = {{x: pipeX, y: gapBottom, w: pipeW, h: this.h - gapBottom}};
+      if (rectCircleCollide(topRect, px, py, pw, ph) || rectCircleCollide(bottomRect, px, py, pw, ph)) {{
+        this.end();
+        return;
+      }}
+    }}
+  }}
+
+  drawIntro() {{
+    // show static scene when not running
+    this.drawScene();
+    ctx.save();
+    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    ctx.fillRect(0,0,this.w,this.h);
+    ctx.fillStyle = '#fff';
+    ctx.textAlign = 'center';
+    ctx.font = (Math.floor(this.h*0.05)) + 'px sans-serif';
+    ctx.fillText('Press START to play', this.w/2, this.h/2);
+    ctx.restore();
+  }}
+
+  draw() {{
+    this.drawScene();
+    // draw pipes
+    for (let p of this.pipes) {{
+      const pipeW = Math.floor(this.w * 0.09);
+      const scale = pipeW / images.pipe.width;
+      // top
+      const topH = p.center - (this.spawnGap/2);
+      ctx.drawImage(images.pipe, p.x, 0, pipeW, topH);
+      // bottom
+      const bottomY = p.center + (this.spawnGap/2);
+      ctx.drawImage(images.pipe, p.x, bottomY, pipeW, this.h - bottomY);
+    }}
+    // draw player (centered)
+    ctx.save();
+    ctx.translate(this.player.x, this.player.y);
+    ctx.rotate(this.player.rotation);
+    const drawW = this.player.vw;
+    const drawH = this.player.vh;
+    ctx.drawImage(images.player, -drawW/2, -drawH/2, drawW, drawH);
+    ctx.restore();
+  }}
+
+  drawScene() {{
+    // background tiling or cover
+    ctx.clearRect(0,0,this.w,this.h);
+    // draw background stretched to cover
+    ctx.drawImage(images.bg, 0, 0, this.w, this.h);
+  }}
+
+  flap() {{
+    if (!this.running) return;
+    this.player.vy = this.jumpStrength;
+    // small sound effect could be added later
+  }}
+}}
+
+function rectCircleCollide(rect, cx, cy, cw, ch) {{
+  // approximate player as circle radius = max(cw,ch)/2
+  const r = Math.max(cw, ch) * 0.45;
+  // find closest point on rect to circle center
+  const closestX = Math.max(rect.x, Math.min(cx, rect.x + rect.w));
+  const closestY = Math.max(rect.y, Math.min(cy, rect.y + rect.h));
+  const dx = cx - closestX;
+  const dy = cy - closestY;
+  return (dx*dx + dy*dy) <= r*r;
+}}
+
+let initialized = false;
+loadAssets().then(() => {{
+  // scale player sizes depending on canvas
+  const g = new Game();
+  game = g;
+  initialized = true;
+
+  // wire UI buttons (start button outside iFrame)
+  document.getElementById('startBtn').addEventListener('click', () => {{
+    g.start();
+    document.getElementById('score').innerText = '0';
+  }});
+
+  document.getElementById('musicToggle').addEventListener('click', () => {{
+    if (!g.audio) return;
+    g.musicOn = !g.musicOn;
+    if (g.musicOn) {{ g.audio.play().catch(()=>{{}}); document.getElementById('musicToggle').innerText = 'Music ON'; }}
+    else {{ g.audio.pause(); document.getElementById('musicToggle').innerText = 'Music OFF'; }}
+  }});
+
+  document.getElementById('shareBtn').addEventListener('click', async () => {{
+    const text = 'My score: ' + g.score + ' (Best: ' + g.best + ')';
+    try {{
+      await navigator.clipboard.writeText(text);
+      alert('Score copied to clipboard. Share it!');
+    }} catch(e) {{
+      prompt('Copy your score:', text);
+    }}
+  }});
+
+  // controls: mouse / touch / keyboard
+  let pointerDown = false;
+  canvas.addEventListener('mousedown', (e) => {{ pointerDown = true; g.flap(); }});
+  canvas.addEventListener('mouseup', (e) => {{ pointerDown = false; }});
+  canvas.addEventListener('touchstart', (e) => {{ e.preventDefault(); g.flap(); }}, {{passive:false}});
+  window.addEventListener('keydown', (e) => {{
+    if (e.code === 'Space') {{
+      e.preventDefault();
+      if(!g.running && !g.over) {{ /* do nothing until start */ }}
+      g.flap();
+    }}
+  }});
+
+  // initial draw
+  g.drawIntro();
+}})
+.catch(err => {{
+  console.error('Asset load failed', err);
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0,0,canvas.width, canvas.height);
+  ctx.fillStyle = '#fff';
+  ctx.font = '20px sans-serif';
+  ctx.fillText('Failed to load assets', 20, 40);
+}});
+
+// If user resizes container size in streamlit, we should inform the game to resize internal width/height
+window.addEventListener('resize', () => {{
+  if (game) {{
+    game.w = canvas.width;
+    game.h = canvas.height;
+  }}
+}});
+
+</script>
+</body>
+</html>
+"""
+
+# Render the HTML game component
+st.components.v1.html(game_html, height=700, scrolling=True)
+
+st.markdown("**Notes:**\n- Use the top-right **START / RESTART** button to begin or restart the game.\n- If you uploaded music it may be blocked by browser autoplay policy; press Music ON to enable after a user gesture.\n- Best score saved in your browser only (localStorage).")
+
+st.markdown("---")
+st.info("If you want, I can tweak visuals (pipe gap, speed, theme colors) or add: 1) save/share via server (requires backend), 2) leaderboards, 3) more animations — tell me which.")
