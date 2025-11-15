@@ -3,6 +3,7 @@ import streamlit as st
 from streamlit.components.v1 import html
 import base64
 import time
+import json
 
 st.set_page_config(page_title="Flappy - Streamlit", layout="wide")
 
@@ -50,9 +51,8 @@ with col3:
 
 start_game = start_immediately or start_button_top
 
-# Build HTML/JS game. Kept inside python string so app is a single .py file.
-# JS handles game loop, physics, uploads via data URLs passed below, localStorage best score, music control.
-game_html = f"""
+# Build HTML/JS game as a plain string with tokens to replace (avoids f-string/brace issues).
+game_html = """
 <!doctype html>
 <html>
 <head>
@@ -60,17 +60,17 @@ game_html = f"""
   <title>Flappy - Embedded</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
-    html,body {{ margin:0; height:100%; background:#111; }}
-    #gameArea {{ display:flex; align-items:center; justify-content:center; height:100%; }}
-    canvas {{ border-radius:12px; box-shadow:0 6px 16px rgba(0,0,0,0.6); background:#88c; }}
-    .ui-top {{
+    html,body { margin:0; height:100%; background:#111; }
+    #gameArea { display:flex; align-items:center; justify-content:center; height:100%; }
+    canvas { border-radius:12px; box-shadow:0 6px 16px rgba(0,0,0,0.6); background:#88c; }
+    .ui-top {
       position:absolute; top:8px; left:8px; right:8px; display:flex; justify-content:space-between; pointer-events:none;
       font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;
       color:white; z-index:10;
-    }}
-    .ui-top .left, .ui-top .right {{ pointer-events:auto; }}
-    .btn {{ background:rgba(0,0,0,0.3); color:white; padding:6px 10px; border-radius:8px; border:1px solid rgba(255,255,255,0.08); cursor:pointer; }}
-    .small {{ font-size:14px; }}
+    }
+    .ui-top .left, .ui-top .right { pointer-events:auto; }
+    .btn { background:rgba(0,0,0,0.3); color:white; padding:6px 10px; border-radius:8px; border:1px solid rgba(255,255,255,0.08); cursor:pointer; }
+    .small { font-size:14px; }
   </style>
 </head>
 <body>
@@ -89,16 +89,16 @@ game_html = f"""
   </div>
 
 <script>
-(() => {{
+(() => {
   const canvas = document.getElementById('gameCanvas');
   const ctx = canvas.getContext('2d');
   let W = canvas.width, H = canvas.height;
 
   // Load images (data URLs passed from Python)
-  const playerSrc = "{player_url}";
-  const obstacleSrc = "{obstacle_url}";
-  const bgSrc = "{bg_url}";
-  const musicSrc = "{music_url}";
+  const playerSrc = __PLAYER_URL__;
+  const obstacleSrc = __OBSTACLE_URL__;
+  const bgSrc = __BG_URL__;
+  const musicSrc = __MUSIC_URL__;
 
   // Default images (simple drawn shapes) if user didn't upload
   const playerImg = new Image();
@@ -109,55 +109,55 @@ game_html = f"""
 
   function maybeCount(){ imagesLoaded++; }
 
-  if (playerSrc) {{
+  if (playerSrc) {
     playerImg.src = playerSrc;
     playerImg.onload = maybeCount;
     playerImg.onerror = maybeCount;
-  }} else {{
+  } else {
     // draw later
     maybeCount();
-  }}
+  }
 
-  if (obstacleSrc) {{
+  if (obstacleSrc) {
     obstacleImg.src = obstacleSrc;
     obstacleImg.onload = maybeCount;
     obstacleImg.onerror = maybeCount;
-  }} else {{
+  } else {
     maybeCount();
-  }}
+  }
 
-  if (bgSrc) {{
+  if (bgSrc) {
     bgImg.src = bgSrc;
     bgImg.onload = maybeCount;
     bgImg.onerror = maybeCount;
-  }} else {{
+  } else {
     maybeCount();
-  }}
+  }
 
   // Music
   let audio = null;
-  if (musicSrc) {{
+  if (musicSrc) {
     audio = new Audio(musicSrc);
     audio.loop = true;
     audio.volume = 0.5;
-  }}
+  }
 
   // Game state
   let playing = false;
   let paused = false;
   let gravity = 0.45;
   let lift = -9;
-  let bird = {{ x: 100, y: H/2, vel: 0, w: 48, h: 36 }};
+  let bird = { x: 100, y: H/2, vel: 0, w: 48, h: 36 };
   let pipes = [];
   let spawnTimer = 0;
   let score = 0;
   let best = localStorage.getItem('flappy_best') || 0;
   let lastTimestamp = null;
   let elapsedMs = 0;
-  const timeLimitMinutes = {int(minutes)}; // passed from sidebar
+  const timeLimitMinutes = __MINUTES__; // passed from sidebar
 
   // Start / reset
-  function resetGame() {{
+  function resetGame() {
     bird.y = H/2;
     bird.vel = 0;
     pipes = [];
@@ -166,63 +166,63 @@ game_html = f"""
     elapsedMs = 0;
     lastTimestamp = null;
     updateScoreDisplay();
-  }}
+  }
 
   // Input
-  function flap() {{
+  function flap() {
     bird.vel = lift;
-  }}
-  window.addEventListener('keydown', (e)=>{{ if(e.code==='Space') flap(); }});
-  canvas.addEventListener('mousedown', (e)=>{{ flap(); }});
-  canvas.addEventListener('touchstart', (e)=>{{ e.preventDefault(); flap(); }}, {{passive:false}});
+  }
+  window.addEventListener('keydown', (e)=>{ if(e.code==='Space') flap(); });
+  canvas.addEventListener('mousedown', (e)=>{ flap(); });
+  canvas.addEventListener('touchstart', (e)=>{ e.preventDefault(); flap(); }, {passive:false});
 
   // Buttons
   const startPauseBtn = document.getElementById('startPauseBtn');
   const muteBtn = document.getElementById('muteBtn');
   const shareBtn = document.getElementById('shareBtn');
 
-  startPauseBtn.addEventListener('click', ()=>{{
-    if(!playing) {{
+  startPauseBtn.addEventListener('click', ()=>{
+    if(!playing) {
       startPlaying();
-    }} else {{
+    } else {
       paused = !paused;
       startPauseBtn.textContent = paused ? 'Resume' : 'Pause';
       if(audio) audio[paused ? 'pause' : 'play']();
-    }}
-  }});
+    }
+  });
 
-  muteBtn.addEventListener('click', ()=>{{
+  muteBtn.addEventListener('click', ()=>{
     if(!audio) return;
-    if(audio.muted) {{ audio.muted = false; muteBtn.textContent='Mute'; }}
-    else {{ audio.muted = true; muteBtn.textContent='Unmute'; }}
-  }});
+    if(audio.muted) { audio.muted = false; muteBtn.textContent='Mute'; }
+    else { audio.muted = true; muteBtn.textContent='Unmute'; }
+  });
 
-  shareBtn.addEventListener('click', ()=>{{
-    const text = encodeURIComponent(`I scored ${{score}} points playing this Flappy-style game!`);
+  shareBtn.addEventListener('click', ()=>{
+    const text = encodeURIComponent(`I scored ${score} points playing this Flappy-style game!`);
     const url = encodeURIComponent(location.href);
-    const tweet = `https://twitter.com/intent/tweet?text=${{text}}&url=${{url}}`;
+    const tweet = `https://twitter.com/intent/tweet?text=${text}&url=${url}`;
     window.open(tweet, '_blank');
-  }});
+  });
 
-  function startPlaying() {{
+  function startPlaying() {
     playing = true;
     paused = false;
     startPauseBtn.textContent = 'Pause';
-    if(audio) audio.play().catch(()=>{{/* ignore autoplay block */}});
+    if(audio) audio.play().catch(()=>{/* ignore autoplay block */});
     resetGame();
     requestAnimationFrame(loop);
-  }}
+  }
 
-  function updateScoreDisplay() {{
-    document.getElementById('scoreDisplay').textContent = `Score: ${{score}}  | Best: ${{best}}`;
-  }}
+  function updateScoreDisplay() {
+    document.getElementById('scoreDisplay').textContent = `Score: ${score}  | Best: ${best}`;
+  }
 
   // Game loop
-  function loop(ts) {{
+  function loop(ts) {
     if (!lastTimestamp) lastTimestamp = ts;
     const dt = ts - lastTimestamp;
     lastTimestamp = ts;
-    if(!paused) {{
+    if(!paused) {
       // update
       elapsedMs += dt;
       bird.vel += gravity;
@@ -230,90 +230,90 @@ game_html = f"""
       spawnTimer += dt;
 
       // spawn pipes every ~1.6s
-      if(spawnTimer > 1600) {{
+      if(spawnTimer > 1600) {
         spawnTimer = 0;
         const gap = 140 + Math.random()*60;
         const topH = 80 + Math.random()*(H - 300);
-        pipes.push({{ x: W + 20, top: topH, gap }});
-      }}
+        pipes.push({ x: W + 20, top: topH, gap });
+      }
 
       // move pipes
-      for(let i=pipes.length-1;i>=0;i--) {{
+      for(let i=pipes.length-1;i>=0;i--) {
         pipes[i].x -= 2.6 + Math.min(score/100, 2.0);
         // scoring when pipe passes bird.x
-        if(!pipes[i].scored && pipes[i].x + 40 < bird.x) {{
+        if(!pipes[i].scored && pipes[i].x + 40 < bird.x) {
           score += 1;
           pipes[i].scored = true;
-          if(score > best) {{
+          if(score > best) {
             best = score;
             localStorage.setItem('flappy_best', best);
-          }}
+          }
           updateScoreDisplay();
-        }}
+        }
         // remove offscreen
         if(pipes[i].x < -80) pipes.splice(i,1);
-      }}
+      }
 
       // collisions: floor and ceiling
-      if(bird.y + bird.h/2 >= H || bird.y - bird.h/2 <= 0) {{
+      if(bird.y + bird.h/2 >= H || bird.y - bird.h/2 <= 0) {
         playing = false;
-      }}
+      }
 
       // pipe collisions
-      for(const p of pipes) {{
+      for(const p of pipes) {
         const pipeW = 60;
         const px = p.x, top = p.top, gap = p.gap;
-        if(bird.x + bird.w/2 > px - pipeW/2 && bird.x - bird.w/2 < px + pipeW/2) {{
-          if(bird.y - bird.h/2 < top || bird.y + bird.h/2 > top + gap) {{
+        if(bird.x + bird.w/2 > px - pipeW/2 && bird.x - bird.w/2 < px + pipeW/2) {
+          if(bird.y - bird.h/2 < top || bird.y + bird.h/2 > top + gap) {
             playing = false;
             break;
-          }}
-        }}
-      }}
+          }
+        }
+      }
 
       // time limit
-      if(timeLimitMinutes > 0) {{
-        if(elapsedMs >= timeLimitMinutes * 60 * 1000) {{
+      if(timeLimitMinutes > 0) {
+        if(elapsedMs >= timeLimitMinutes * 60 * 1000) {
           playing = false;
-        }}
-      }}
-    }}
+        }
+      }
+    }
 
     // draw
     ctx.clearRect(0,0,W,H);
     // background
-    if(bgSrc) {{
+    if(bgSrc) {
       // draw bg image stretched
-      try {{ ctx.drawImage(bgImg, 0, 0, W, H); }} catch(e) {{ ctx.fillStyle='#70c5ce'; ctx.fillRect(0,0,W,H); }}
-    }} else {{
+      try { ctx.drawImage(bgImg, 0, 0, W, H); } catch(e) { ctx.fillStyle='#70c5ce'; ctx.fillRect(0,0,W,H); }
+    } else {
       ctx.fillStyle='#70c5ce'; ctx.fillRect(0,0,W,H);
       // some clouds
       ctx.fillStyle='rgba(255,255,255,0.6)';
       ctx.beginPath(); ctx.ellipse(120,80,40,24,0,0,Math.PI*2); ctx.fill();
       ctx.beginPath(); ctx.ellipse(220,60,60,30,0,0,Math.PI*2); ctx.fill();
-    }}
+    }
 
     // pipes
     ctx.fillStyle = '#2d8f39';
-    for(const p of pipes) {{
+    for(const p of pipes) {
       const pipeW = 60;
       // top
-      if(obstacleSrc) {{
-        try {{ ctx.drawImage(obstacleImg, p.x - pipeW/2, 0, pipeW, p.top); }} catch(e) {{ ctx.fillRect(p.x - pipeW/2, 0, pipeW, p.top); }}
-      }} else {{
+      if(obstacleSrc) {
+        try { ctx.drawImage(obstacleImg, p.x - pipeW/2, 0, pipeW, p.top); } catch(e) { ctx.fillRect(p.x - pipeW/2, 0, pipeW, p.top); }
+      } else {
         ctx.fillRect(p.x - pipeW/2, 0, pipeW, p.top);
-      }}
+      }
       // bottom
-      if(obstacleSrc) {{
-        try {{ ctx.drawImage(obstacleImg, p.x - pipeW/2, p.top + p.gap, pipeW, H - (p.top + p.gap)); }} catch(e) {{ ctx.fillRect(p.x - pipeW/2, p.top + p.gap, pipeW, H - (p.top + p.gap)); }}
-      }} else {{
+      if(obstacleSrc) {
+        try { ctx.drawImage(obstacleImg, p.x - pipeW/2, p.top + p.gap, pipeW, H - (p.top + p.gap)); } catch(e) { ctx.fillRect(p.x - pipeW/2, p.top + p.gap, pipeW, H - (p.top + p.gap)); }
+      } else {
         ctx.fillRect(p.x - pipeW/2, p.top + p.gap, pipeW, H - (p.top + p.gap));
-      }}
-    }}
+      }
+    }
 
     // bird
-    if(playerSrc) {{
-      try {{
+    if(playerSrc) {
+      try {
         ctx.save();
         // rotate a bit based on vel
         const rot = Math.max(-0.6, Math.min(0.6, bird.vel / 12));
@@ -321,18 +321,18 @@ game_html = f"""
         ctx.rotate(rot);
         ctx.drawImage(playerImg, -bird.w/2, -bird.h/2, bird.w, bird.h);
         ctx.restore();
-      }} catch(e) {{
+      } catch(e) {
         ctx.fillStyle='yellow'; ctx.fillRect(bird.x - bird.w/2, bird.y - bird.h/2, bird.w, bird.h);
-      }}
-    }} else {{
+      }
+    } else {
       ctx.fillStyle='yellow';
       ctx.beginPath();
       ctx.ellipse(bird.x, bird.y, 18, 14, 0, 0, Math.PI*2);
       ctx.fill();
-    }}
+    }
 
     // if not playing show overlay
-    if(!playing) {{
+    if(!playing) {
       ctx.fillStyle='rgba(0,0,0,0.45)';
       ctx.fillRect(0,0,W,H);
       ctx.fillStyle='white';
@@ -342,39 +342,77 @@ game_html = f"""
       ctx.font = '18px system-ui';
       ctx.fillText('Controls: tap / click / spacebar', W/2, H/2 + 10);
       ctx.font = '16px system-ui';
-      ctx.fillText(`Score: ${{score}}  |  Best: ${{best}}`, W/2, H/2 + 40);
-    }}
+      ctx.fillText(`Score: ${score}  |  Best: ${best}`, W/2, H/2 + 40);
+    }
 
     if(playing) requestAnimationFrame(loop);
-    else {{
+    else {
       // stop music if ended
       if(audio) audio.pause();
       startPauseBtn.textContent = 'Start';
       // final update to best localStorage (already updated during scoring)
       updateScoreDisplay();
-    }}
-  }}
+    }
+  }
 
   // start automatically if Streamlit asked to start
-  const startFromPython = {str(start_game).lower()};
-  if(startFromPython) {{
+  const startFromPython = __STARTGAME__;
+  if(startFromPython) {
     startPlaying();
-  }}
+  }
   // initial display update
   updateScoreDisplay();
 
   // handle resize to keep things responsive
-  function resizeCanvas() {{
+  function resizeCanvas() {
     const containerW = Math.min(window.innerWidth - 100, 900);
     const containerH = Math.min(window.innerHeight - 160, 700);
     // maintain aspect ratio approx 3:2
     const ratio = 3/2;
     let cw = containerW, ch = Math.round(cw / ratio);
-    if(ch > containerH) {{
+    if(ch > containerH) {
       ch = containerH; cw = Math.round(ch * ratio);
-    }}
+    }
     canvas.width = cw; canvas.height = ch;
     W = canvas.width; H = canvas.height;
-  }}
+  }
   window.addEventListener('resize', resizeCanvas);
-  resizeCanvas
+  resizeCanvas();
+
+})();
+</script>
+</body>
+</html>
+"""
+
+# Safely inject Python values into the HTML by replacing tokens.
+# Use json.dumps so strings are properly quoted/escaped for JS string literals.
+game_html = game_html.replace("__PLAYER_URL__", json.dumps(player_url))
+game_html = game_html.replace("__OBSTACLE_URL__", json.dumps(obstacle_url))
+game_html = game_html.replace("__BG_URL__", json.dumps(bg_url))
+game_html = game_html.replace("__MUSIC_URL__", json.dumps(music_url))
+game_html = game_html.replace("__MINUTES__", str(int(minutes)))
+game_html = game_html.replace("__STARTGAME__", "true" if start_game else "false")
+
+# Render the HTML in Streamlit - this is still a single .py file; HTML lives inside the string
+# Height is set to allow the canvas and UI comfortably
+html(game_html, height=680, scrolling=True)
+
+# Provide short instructions and Hindi+English explanation per your preference
+st.markdown("---")
+st.subheader("Instructions / निर्देश")
+st.markdown("""
+- Use the sidebar to upload **player**, **obstacle**, **background** and optional **music** files.  
+- Click **Start Game** (sidebar or top-right) to begin. Use mouse click / tap / **spacebar** to flap.  
+- The in-game top-right buttons: **Start/Pause**, **Mute**, **Share** (tweet).  
+- Best score is saved in your browser's **localStorage**. If you want server-side saving (so score persists across devices) tell me and I will add a small JSON backend or connect to a Google Sheet.
+- अगर आप बिल्कुल भी HTML नहीं चाहते (न तो embed), तो ब्राउज़र में गेम बनाना संभव नहीं होगा — उस स्थिति में मैं एक `pygame`-based desktop Python game बना दूँगा जिसे आप अपने कंप्यूटर पर चला सकते हैं.
+""")
+
+st.markdown("### Developer notes (short):\n- The game canvas and logic are implemented in embedded JS/HTML inside the Python file. This is required for smooth browser gameplay.\n- All assets are encoded and passed from Python to the embedded game as data URLs, so no external files are needed after upload.\n- Timer option: set minutes in the sidebar; 0 disables the timer.\n")
+
+st.markdown("If you want any of the following, tell me and I'll update the single .py file accordingly:")
+st.write("- Server-side best-score saving (JSON file or DB).")
+st.write("- Different physics (stronger gravity / slower speed).")
+st.write("- More UI polish: custom fonts, flashy animations, more responsive layouts.")
+st.write("- A downloadable build (PWA) or a desktop pygame version instead of browser.")
