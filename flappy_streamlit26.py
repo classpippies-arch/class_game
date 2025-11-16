@@ -1,3 +1,4 @@
+# flappy_streamlit26.py
 import streamlit as st
 import base64
 import os
@@ -6,43 +7,47 @@ st.set_page_config(page_title="Flappy Bird Game", layout="wide")
 st.title("Flappy Bird – Streamlit Edition")
 st.write("Tap/Click/Space to jump. Menu music and in-game music handled separately. Mobile + PC friendly.")
 
-# ----- Configure these filenames to match your repo exactly -----
-# If filenames differ, change them here (case-sensitive)
-MENU_MUSIC_FILE = "Home Screen Music (Only on Menu Screen).mp3"  # <--- exact file in your repo
+# -------------------------
+# Configure these filenames to match your repo exactly (case-sensitive)
+# -------------------------
+MENU_MUSIC_FILE = "Home Screen Music (Only on Menu Screen).mp3"
 INGAME_MUSIC_FILE = "ingame_music_1.mp3"  # or ingame_music_2.mp3, etc.
 
 PLAYER_FILE = "player_character.png"
 PIPE_FILE = "obstacle_enemy.png"
 BG_FILE = "background_image.png"
 
-# ----- helper to turn repo file into data URL (or None if missing) -----
+# -------------------------
+# Helper: convert local file to data URL or None
+# -------------------------
 def file_to_data_url_if_exists(filepath):
     if not os.path.exists(filepath):
         return None
     b = open(filepath, "rb").read()
-    # detect type
     ext = filepath.lower().split(".")[-1]
-    if ext in ("png", "jpg", "jpeg", "svg"):
-        mime = "image/png" if ext == "png" or ext == "svg" else "image/jpeg"
-    elif ext in ("mp3",):
+    if ext in ("png", "svg"):
+        mime = "image/png"
+    elif ext in ("jpg", "jpeg"):
+        mime = "image/jpeg"
+    elif ext == "mp3":
         mime = "audio/mpeg"
-    elif ext in ("ogg",):
+    elif ext == "ogg":
         mime = "audio/ogg"
-    elif ext in ("wav",):
+    elif ext == "wav":
         mime = "audio/wav"
     else:
         mime = "application/octet-stream"
     return f"data:{mime};base64," + base64.b64encode(b).decode()
 
-# build urls (None if file not present)
 PLAYER_URL = file_to_data_url_if_exists(PLAYER_FILE) or ""
 PIPE_URL = file_to_data_url_if_exists(PIPE_FILE) or ""
 BG_URL = file_to_data_url_if_exists(BG_FILE) or ""
 MENU_MUSIC_URL = file_to_data_url_if_exists(MENU_MUSIC_FILE)
 INGAME_MUSIC_URL = file_to_data_url_if_exists(INGAME_MUSIC_FILE)
 
-# ----- If music missing, JS will hide music controls gracefully -----
-
+# -------------------------
+# Embedded HTML/JS game (use double braces {{ }} to escape for Python f-string)
+# -------------------------
 game_html = f"""
 <!doctype html>
 <html>
@@ -69,7 +74,7 @@ game_html = f"""
   <div id="menuOverlay">
     <div id="menuCard">
       <h2>Welcome — Flappy Streamlit</h2>
-      <p>Menu music will play here. Press PLAY to start the game.</p>
+      <p>Menu music will play here. Press PLAY to allow audio, then START to begin the game.</p>
       <button id="menuPlayBtn">PLAY</button>
     </div>
   </div>
@@ -101,48 +106,43 @@ if (INGAME_MUSIC_URL) {{
   ingameAudio.volume = 0.5;
 }}
 
-// menu overlay controls
+// references to DOM
 const menuOverlay = document.getElementById('menuOverlay');
 const menuPlayBtn = document.getElementById('menuPlayBtn');
 const startBtn = document.getElementById('startBtn');
 const musicToggle = document.getElementById('musicToggle');
 const scoreSpan = document.getElementById('score');
 
+// persist music toggle in localStorage
+try {{
+  const m = localStorage.getItem('flappy_music_enabled');
+  if (m !== null) musicEnabled = m === '1';
+  musicToggle.innerText = musicEnabled ? 'Music ON' : 'Music OFF';
+}} catch(e){{ console.warn('storage err', e); }}
+
 // toggle music on/off
 musicToggle.addEventListener('click', () => {{
   musicEnabled = !musicEnabled;
   musicToggle.innerText = musicEnabled ? 'Music ON' : 'Music OFF';
+  try {{ localStorage.setItem('flappy_music_enabled', musicEnabled ? '1' : '0'); }} catch(e){{}}
   if (!musicEnabled) {{
     if (menuAudio) menuAudio.pause();
     if (ingameAudio) ingameAudio.pause();
   }} else {{
-    // resume appropriate track depending on state
     if (!gameRunning && menuAudio) menuAudio.play().catch(()=>{{}});
     if (gameRunning && ingameAudio) ingameAudio.play().catch(()=>{{}});
   }}
 }});
 
-// Play only after user gesture — browsers block autoplay otherwise
-menuPlayBtn.addEventListener('click', () => {{
-  // start playing menu music (if available)
-  if (menuAudio && musicEnabled) {{
-    menuAudio.currentTime = 0;
-    menuAudio.play().catch(()=>{{}});
-  }}
-  // remove overlay pointer-events to allow start press etc.
-  // We keep overlay visible until START is pressed to show menu
-}});
-
-// Game canvas + engine (simplified)
+// canvas & engine
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
 
-function resize(){ canvas.width = Math.min(window.innerWidth*0.95, 1000); canvas.height = Math.min(window.innerHeight*0.72, 700); }
+function resize(){{ canvas.width = Math.min(window.innerWidth*0.95, 1000); canvas.height = Math.min(window.innerHeight*0.72, 700); }}
 resize(); window.addEventListener('resize', resize);
 
-// assets
 let images = {{ bg: null, player: null, pipe: null }};
-function loadImage(url){ return new Promise((res,reject)=>{{ let i=new Image(); i.onload = ()=>res(i); i.onerror = reject; i.src = url; }});}
+function loadImage(url){{ return new Promise((res,rej) => {{ let i=new Image(); i.onload = ()=>res(i); i.onerror = rej; i.src = url; }}); }}
 
 let gameRunning = false;
 let gameOver = false;
@@ -151,47 +151,47 @@ let player = {{ x: 100, y: 200, vy:0, size:48 }};
 let gravity = 0.6;
 let jump = -11;
 let pipes = [];
-let pipeGap = Math.floor(canvas.height * 0.28);
+let pipeGap = 160;
 let pipeTimer = 0;
+let last = performance.now();
 
-// load images (if URLs empty, create simple placeholders)
-async function loadAssets(){{
+// load assets
+async function loadAssets() {{
   try {{
     images.bg = BG_URL ? await loadImage(BG_URL) : null;
     images.player = PLAYER_URL ? await loadImage(PLAYER_URL) : null;
     images.pipe = PIPE_URL ? await loadImage(PIPE_URL) : null;
-  }} catch(e) {{
-    console.warn('asset load failed', e);
-  }}
+  }} catch(e) {{ console.warn('asset load failed', e); }}
 }}
 
-function reset(){{
-  score = 0; player.y = canvas.height/2; player.vy = 0; pipes = []; gameOver = false;
-  document.getElementById('score').innerText = score;
+function reset() {{
+  score = 0;
+  player.y = canvas.height/2;
+  player.vy = 0;
+  pipes = [];
+  gameOver = false;
+  scoreSpan.innerText = score;
 }}
 
-function spawnPipe(){{
+function spawnPipe() {{
   const margin = Math.floor(canvas.height*0.12);
   const center = Math.floor(Math.random()*(canvas.height-margin*2-pipeGap) + margin + pipeGap/2);
   pipes.push({{ x: canvas.width + 100, center, scored:false }});
 }}
 
-function update(dt){{
+function update(dt) {{
   if (!gameRunning || gameOver) return;
   pipeTimer += dt;
   if (pipeTimer > 1400) {{ pipeTimer = 0; spawnPipe(); }}
-  // move pipes
   for (let p of pipes) p.x -= 3 * (dt/16);
   if (pipes.length && pipes[0].x + 120 < 0) pipes.shift();
   player.vy += gravity * (dt/16);
   player.y += player.vy * (dt/16);
-  // collisions & scoring
   for (let p of pipes) {{
     const w = Math.floor(canvas.width * 0.09);
     const topH = p.center - (pipeGap/2);
     const bottomY = p.center + (pipeGap/2);
-    if (!p.scored && p.x + w < player.x) {{ p.scored = true; score++; document.getElementById('score').innerText = score; }}
-    // simple AABB circle approx
+    if (!p.scored && p.x + w < player.x) {{ p.scored = true; score++; scoreSpan.innerText = score; }}
     const r = Math.max(player.size, player.size) * 0.45;
     const closestX = Math.max(p.x, Math.min(player.x, p.x + w));
     const closestYTop = Math.max(0, Math.min(player.y, topH));
@@ -205,11 +205,9 @@ function update(dt){{
   if (player.y + player.size > canvas.height) gameOver = true;
 }}
 
-function render(){{
-  // background
+function render() {{
   if (images.bg) ctx.drawImage(images.bg, 0, 0, canvas.width, canvas.height);
   else {{ ctx.fillStyle = '#000'; ctx.fillRect(0,0,canvas.width,canvas.height); }}
-  // pipes
   for (let p of pipes) {{
     const w = Math.floor(canvas.width * 0.09);
     const topH = p.center - (pipeGap/2);
@@ -222,24 +220,23 @@ function render(){{
       ctx.fillRect(p.x, p.center + (pipeGap/2), w, canvas.height - (p.center + (pipeGap/2)));
     }}
   }}
-  // player
   if (images.player) ctx.drawImage(images.player, player.x, player.y, player.size, player.size);
-  else {{
-    ctx.fillStyle = '#f1c40f'; ctx.fillRect(player.x, player.y, player.size, player.size);
-  }}
-  // score is shown by outer HTML element; no need to draw here
+  else {{ ctx.fillStyle = '#f1c40f'; ctx.fillRect(player.x, player.y, player.size, player.size); }}
 }}
 
-let last = performance.now();
-function loop(t){{
+function loop(t) {{
   const dt = t - last;
   last = t;
   update(dt);
   render();
   if (!gameOver) requestAnimationFrame(loop);
   else {{
-    // stop in-game music & show gameover on canvas
     if (ingameAudio) ingameAudio.pause();
+    // save best score
+    try {{
+      const prev = parseInt(localStorage.getItem('flappy_best') || '0');
+      if (score > prev) localStorage.setItem('flappy_best', String(score));
+    }} catch(e){{ console.warn('storage err', e); }}
     ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(0,0,canvas.width,canvas.height);
     ctx.fillStyle = '#fff'; ctx.font = '36px sans-serif'; ctx.textAlign='center';
     ctx.fillText('GAME OVER - Score: ' + score, canvas.width/2, canvas.height/2);
@@ -247,30 +244,25 @@ function loop(t){{
 }}
 
 // controls
-function flap(){ if (!gameRunning || gameOver) return; player.vy = jump; }
+function flap() {{ if (!gameRunning || gameOver) return; player.vy = jump; }}
 window.addEventListener('keydown', (e) => {{ if (e.code === 'Space') flap(); }});
 canvas.addEventListener('mousedown', (e) => {{ if (!gameRunning) return; flap(); }});
 canvas.addEventListener('touchstart', (e) => {{ e.preventDefault(); if (!gameRunning) return; flap(); }}, {{passive:false}});
 
-// start button behavior:
-// - if currently in menu state: pressing START will begin game,
-//   stop menu audio, start ingame audio (if present)
+// Start button behavior
 startBtn.addEventListener('click', async () => {{
-  // ensure user gesture allows audio
   if (!gameRunning) {{
     gameRunning = true;
-    // stop menu music, start ingame music
     if (menuAudio) {{ menuAudio.pause(); menuAudio.currentTime = 0; }}
     if (ingameAudio && musicEnabled) {{
       try {{ await ingameAudio.play(); }} catch(e){{ console.warn('ingame play blocked', e); }}
     }}
-    // hide menu overlay
     menuOverlay.style.display = 'none';
     reset();
     last = performance.now();
     requestAnimationFrame(loop);
   }} else {{
-    // restart while running/after gameover
+    // restart
     reset();
     gameOver = false;
     if (ingameAudio && musicEnabled) {{ ingameAudio.currentTime = 0; ingameAudio.play().catch(()=>{{}}); }}
@@ -279,7 +271,7 @@ startBtn.addEventListener('click', async () => {{
   }}
 }});
 
-// when user clicks PLAY on menu card, start menu music (gesture)
+// Menu play button (gesture to allow menu music)
 menuPlayBtn.addEventListener('click', () => {{
   if (menuAudio && musicEnabled) {{
     menuAudio.currentTime = 0;
@@ -287,29 +279,42 @@ menuPlayBtn.addEventListener('click', () => {{
   }}
 }});
 
-// ensure pause/cleanup if user navigates away
+// on page hide: pause audios
 window.addEventListener('pagehide', () => {{
   if (menuAudio) menuAudio.pause();
   if (ingameAudio) ingameAudio.pause();
 }});
 
-// initial load: load images then render an intro screen
+// show best score from localStorage on load (if any)
+try {{
+  const best = parseInt(localStorage.getItem('flappy_best') || '0');
+  if (!isNaN(best) && best > 0) {{
+    // show small overlay text in menu card
+    const card = document.querySelector('#menuCard');
+    const el = document.createElement('div');
+    el.style.marginTop = '8px';
+    el.style.fontSize = '14px';
+    el.style.opacity = '0.9';
+    el.innerText = 'Best: ' + best;
+    card.appendChild(el);
+  }}
+}} catch(e){{ console.warn('storage err', e); }}
+
 loadAssets().then(() => {{
   render();
-  // show overlay; menuAudio will start only after user clicks Play (menuPlayBtn)
-}}).catch(e => {{ console.warn('assets load err', e); render(); }});
+}}).catch(e => {{ console.warn('assets load', e); render(); }});
 
 </script>
 </body>
 </html>
 """
 
+# Render the HTML game component
 st.components.v1.html(game_html, height=760, scrolling=False)
 
 st.markdown("""
 **Notes (simple):**
-- On the menu, press **PLAY** to allow the menu music to play (browser requires a gesture).
-- Then press **START** to begin playing the game — menu music will stop and in-game music starts.
-- If music filenames in repo are different, update `MENU_MUSIC_FILE` and `INGAME_MUSIC_FILE` variables at top of this script.
+- Click **PLAY** on the menu to allow menu music to start (browser gesture required).  
+- Then press **START** to begin playing — menu music will stop and in-game music will start.  
+- Best score is saved in your browser localStorage.
 """)
-
