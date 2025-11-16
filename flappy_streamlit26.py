@@ -133,7 +133,7 @@ def fileobj_to_data_url(fileobj, default_path=None):
 REPO_BG = "background_image.png"
 REPO_PLAYER = "player_character.png"
 REPO_PIPE = "obstacle_enemy.png"
-REPO_BAG = "player_character.png"  # Fallback to player image
+REPO_BAG = "player_character.png"
 
 # Process files
 BG_URL = fileobj_to_data_url(up_bg, REPO_BG) or ""
@@ -141,7 +141,7 @@ PLAYER_URL = fileobj_to_data_url(up_player, REPO_PLAYER) or ""
 PIPE_URL = fileobj_to_data_url(up_pipe, REPO_PIPE) or ""
 BAG_URL = fileobj_to_data_url(up_bag, REPO_BAG) or ""
 
-# Music files
+# Music files - using your uploaded files
 MENU_MUSIC_URL = fileobj_to_data_url(up_menu_music, "very starting point.mp3")
 INGAME_MUSIC_URL = fileobj_to_data_url(up_ingame_music, "random effect.mp3")
 GAMEOVER_MUSIC_URL = fileobj_to_data_url(up_gameover_music, "ending effect.mp3")
@@ -882,4 +882,8 @@ game_html = f'''
             return rect1.x < rect2.x + rect2.width &&
                    rect1.x + rect1.width > rect2.x &&
                    rect1.y < rect2.y + rect2.height &&
-                   rect1.y
+                   rect1.y + rect1.height > rect2.y;
+        }}
+
+        function flap() {{
+            if (!game
