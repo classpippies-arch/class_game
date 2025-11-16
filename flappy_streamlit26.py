@@ -2,96 +2,156 @@
 import streamlit as st
 import base64
 import os
+import glob
 
 st.set_page_config(page_title="Premium Flappy Bird", layout="wide", page_icon="🐦")
-
-# Custom CSS for premium look
 st.markdown("""
 <style>
-    .main-header {
-        font-size: 3rem;
-        font-weight: 800;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        text-align: center;
-        margin-bottom: 1rem;
-    }
-    .sub-header {
-        text-align: center;
-        color: #666;
-        margin-bottom: 2rem;
-        font-size: 1.2rem;
-    }
-    .sidebar .sidebar-content {
-        background: linear-gradient(180deg, #f8f9fa 0%, #e9ecef 100%);
-    }
-    .upload-section {
-        background: white;
-        padding: 1.5rem;
-        border-radius: 15px;
-        margin: 1rem 0;
-        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-        border: 1px solid #e0e0e0;
-    }
-    .stButton button {
-        width: 100%;
-        border-radius: 10px;
-        font-weight: 600;
-        padding: 0.75rem;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-        border: none;
-        transition: all 0.3s ease;
-    }
-    .stButton button:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
-    }
+/* minimal styling kept from previous premium look */
+.main-header{font-size:2.4rem;font-weight:800;text-align:center}
+.sidebar .sidebar-content {background: linear-gradient(180deg,#f8f9fa,#e9ecef);}
 </style>
 """, unsafe_allow_html=True)
+st.markdown('<div class="main-header">🎮 Premium Flappy Bird — Auto Asset Loader</div>', unsafe_allow_html=True)
+st.write("The app will automatically load assets from `./assets/images/` and `./assets/sounds/` (repo). If not found, it will attempt repo-root fallbacks.")
 
-st.markdown('<div class="main-header">🎮 Premium Flappy Bird</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub-header">Customize your gaming experience with stunning visuals and audio</div>', unsafe_allow_html=True)
+# -------------------------
+# CONFIG: asset directories & expected names
+# -------------------------
+ASSETS_IMG_DIR = os.path.join(".", "assets", "images")
+ASSETS_SND_DIR = os.path.join(".", "assets", "sounds")
 
-# --------- Premium Sidebar Design ---------
+# expected image filenames (preferred)
+EXPECTED_BG = "background_image.png"
+EXPECTED_PLAYER = "player_character.png"
+EXPECTED_PIPE = "obstacle_enemy.png"
+
+# fallback filenames in repo root (common in your repo)
+FALLBACK_BG = "background_image.png"
+FALLBACK_PLAYER = "player_character.png"
+FALLBACK_PIPE = "obstacle_enemy.png"
+
+# utility: convert file path to data URL (or None)
+def path_to_data_url(path):
+    try:
+        if not path or not os.path.exists(path):
+            return None
+        with open(path, "rb") as f:
+            raw = f.read()
+        ext = path.lower().split(".")[-1]
+        if ext in ("png", "svg"):
+            mime = "image/png"
+        elif ext in ("jpg", "jpeg"):
+            mime = "image/jpeg"
+        elif ext == "mp3":
+            mime = "audio/mpeg"
+        elif ext == "ogg":
+            mime = "audio/ogg"
+        elif ext == "wav":
+            mime = "audio/wav"
+        else:
+            mime = "application/octet-stream"
+        return f"data:{mime};base64," + base64.b64encode(raw).decode()
+    except Exception as e:
+        st.warning(f"Failed to load asset `{path}`: {e}")
+        return None
+
+# helper: find file in assets dir with given name, or fallback to repo root
+def find_asset_image(preferred_dir, filename, fallback):
+    # check preferred dir
+    if preferred_dir and os.path.isdir(preferred_dir):
+        candidate = os.path.join(preferred_dir, filename)
+        if os.path.exists(candidate):
+            return candidate
+    # check repo root fallback
+    if os.path.exists(fallback):
+        return fallback
+    return None
+
+# helper: collect mp3 files from assets dir (sorted)
+def collect_sounds(preferred_dir):
+    files = []
+    if preferred_dir and os.path.isdir(preferred_dir):
+        files = sorted(glob.glob(os.path.join(preferred_dir, "*.mp3")))
+    # if none and repo root has mp3s, use them
+    if not files:
+        files = sorted(glob.glob("*.mp3"))
+    return files
+
+# --------------------------------------
+# Resolve assets (auto)
+# --------------------------------------
+bg_path = find_asset_image(ASSETS_IMG_DIR, EXPECTED_BG, FALLBACK_BG)
+player_path = find_asset_image(ASSETS_IMG_DIR, EXPECTED_PLAYER, FALLBACK_PLAYER)
+pipe_path = find_asset_image(ASSETS_IMG_DIR, EXPECTED_PIPE, FALLBACK_PIPE)
+
+sound_files = collect_sounds(ASSETS_SND_DIR)
+
+# Choose menu / ingame / gameover music heuristically
+menu_music_path = None
+ingame_music_path = None
+gameover_music_path = None
+if sound_files:
+    # try to pick names containing 'menu' 'ingame' 'gameover' else first ones
+    lower_files = [os.path.basename(p).lower() for p in sound_files]
+    for idx, name in enumerate(lower_files):
+        if "menu" in name or "home" in name:
+            menu_music_path = sound_files[idx]
+            break
+    for idx, name in enumerate(lower_files):
+        if "game" in name and "over" not in name and "ingame" in name:
+            ingame_music_path = sound_files[idx]
+            break
+    for idx, name in enumerate(lower_files):
+        if "gameover" in name or "game-over" in name or "end" in name or "ending" in name:
+            gameover_music_path = sound_files[idx]
+            break
+    # fallback assignments
+    if not menu_music_path and len(sound_files) >= 1:
+        menu_music_path = sound_files[0]
+    if not ingame_music_path and len(sound_files) >= 2:
+        ingame_music_path = sound_files[1]
+    if not gameover_music_path and len(sound_files) >= 3:
+        gameover_music_path = sound_files[2]
+
+# Convert to data-urls
+BG_URL = path_to_data_url(bg_path) or ""
+PLAYER_URL = path_to_data_url(player_path) or ""
+PIPE_URL = path_to_data_url(pipe_path) or ""
+MENU_MUSIC_URL = path_to_data_url(menu_music_path) if menu_music_path else None
+INGAME_MUSIC_URL = path_to_data_url(ingame_music_path) if ingame_music_path else None
+GAMEOVER_MUSIC_URL = path_to_data_url(gameover_music_path) if gameover_music_path else None
+
+# Show friendly messages for missing assets
+missing = []
+if not (BG_URL and PLAYER_URL and PIPE_URL):
+    if not BG_URL:
+        missing.append("background image")
+    if not PLAYER_URL:
+        missing.append("player image")
+    if not PIPE_URL:
+        missing.append("obstacle image")
+    st.warning("Missing assets detected: " + ", ".join(missing) + ". The game will use fallback visuals (solid shapes).")
+if not sound_files:
+    st.info("No .mp3 files found in ./assets/sounds/ or repo root. No automatic music will play (use toggle to test).")
+else:
+    st.success(f"Found {len(sound_files)} sound file(s). Menu/In-game/Gameover music selected automatically.")
+
+# Optional: let user override by upload (still optional; not required)
 with st.sidebar:
-    st.markdown("### 🎨 Game Studio")
-    
-    with st.container():
-        st.markdown("#### 🖼️ Visual Assets")
-        with st.expander("Upload Images", expanded=True):
-            up_bg = st.file_uploader("🌅 Background", type=["png","jpg","jpeg"], key="bg")
-            up_player = st.file_uploader("🐦 Player Character", type=["png","jpg","jpeg"], key="player")
-            up_pipe = st.file_uploader("🚧 Obstacles", type=["png","jpg","jpeg"], key="pipe")
-            up_bag = st.file_uploader("💼 Character's Bag", type=["png","jpg","jpeg"], key="bag")
+    st.markdown("### Optional: override detected assets")
+    up_bg = st.file_uploader("Background (optional)", type=["png","jpg","jpeg"], key="override_bg")
+    up_player = st.file_uploader("Player (optional)", type=["png","jpg","jpeg"], key="override_player")
+    up_pipe = st.file_uploader("Obstacle (optional)", type=["png","jpg","jpeg"], key="override_pipe")
+    up_menu = st.file_uploader("Menu music (optional)", type=["mp3","ogg","wav"], key="override_menu")
+    up_ingame = st.file_uploader("Ingame music (optional)", type=["mp3","ogg","wav"], key="override_ingame")
+    up_gameover = st.file_uploader("Gameover music (optional)", type=["mp3","ogg","wav"], key="override_gameover")
 
-    with st.container():
-        st.markdown("#### 🎵 Audio Library")
-        with st.expander("Music Settings", expanded=True):
-            up_menu_music = st.file_uploader("🏠 Menu Music", type=["mp3","ogg","wav"], key="menu_music")
-            up_ingame_music = st.file_uploader("🎮 Game Music", type=["mp3","ogg","wav"], key="ingame_music")
-            up_gameover_music = st.file_uploader("💀 Game Over Music", type=["mp3","ogg","wav"], key="gameover_music")
-
-    with st.container():
-        st.markdown("#### ⚙️ Game Settings")
-        with st.expander("Difficulty & Controls", expanded=True):
-            col1, col2 = st.columns(2)
-            with col1:
-                game_speed = st.slider("Speed", 1, 10, 3)
-                gravity_strength = st.slider("Gravity", 0.1, 1.0, 0.5)
-            with col2:
-                jump_power = st.slider("Jump Power", 5, 20, 12)
-                pipe_gap = st.slider("Pipe Gap", 120, 250, 180)
-
-    st.markdown("---")
-    st.success("🎯 **Pro Tip**: Upload high-quality assets for the best gaming experience!")
-
-# --------- File Processing ---------
-def fileobj_to_data_url(fileobj, default_path=None):
-    if fileobj is not None:
-        raw = fileobj.read()
-        name = fileobj.name.lower()
+# If overrides provided, use them (these are optional)
+def uploaded_to_dataurl(uploaded, current):
+    if uploaded is not None:
+        raw = uploaded.read()
+        name = uploaded.name.lower()
         mime = "image/png"
         if name.endswith(".jpg") or name.endswith(".jpeg"):
             mime = "image/jpeg"
@@ -102,752 +162,161 @@ def fileobj_to_data_url(fileobj, default_path=None):
         elif name.endswith(".wav"):
             mime = "audio/wav"
         return f"data:{mime};base64," + base64.b64encode(raw).decode()
-    
-    if default_path and os.path.exists(default_path):
-        with open(default_path, "rb") as f:
-            raw = f.read()
-        ext = default_path.lower().split(".")[-1]
-        mime = "image/png"
-        if ext in ("jpg", "jpeg"):
-            mime = "image/jpeg"
-        elif ext == "mp3":
-            mime = "audio/mpeg"
-        elif ext == "ogg":
-            mime = "audio/ogg"
-        elif ext == "wav":
-            mime = "audio/wav"
-        return f"data:{mime};base64," + base64.b64encode(raw).decode()
-    return None
+    return current
 
-# File mappings
-REPO_BG = "background_image.png"
-REPO_PLAYER = "player_character.png"
-REPO_PIPE = "obstacle_enemy.png"
-REPO_BAG = "player_character.png"  # Fallback to player image
-REPO_MENU_MUSIC = "Home Screen Music (Only on Menu Screen).mp3"
-REPO_INGAME_MUSIC = "ingame_music_1.mp3"
-REPO_GAMEOVER_MUSIC = "ingame_music_2.mp3"
+BG_URL = uploaded_to_dataurl(up_bg, BG_URL) or ""
+PLAYER_URL = uploaded_to_dataurl(up_player, PLAYER_URL) or ""
+PIPE_URL = uploaded_to_dataurl(up_pipe, PIPE_URL) or ""
+MENU_MUSIC_URL = uploaded_to_dataurl(up_menu, MENU_MUSIC_URL) if (up_menu or MENU_MUSIC_URL) else None
+INGAME_MUSIC_URL = uploaded_to_dataurl(up_ingame, INGAME_MUSIC_URL) if (up_ingame or INGAME_MUSIC_URL) else None
+GAMEOVER_MUSIC_URL = uploaded_to_dataurl(up_gameover, GAMEOVER_MUSIC_URL) if (up_gameover or GAMEOVER_MUSIC_URL) else None
 
-# Process files
-BG_URL = fileobj_to_data_url(up_bg, REPO_BG) or ""
-PLAYER_URL = fileobj_to_data_url(up_player, REPO_PLAYER) or ""
-PIPE_URL = fileobj_to_data_url(up_pipe, REPO_PIPE) or ""
-BAG_URL = fileobj_to_data_url(up_bag, REPO_BAG) or ""
-MENU_MUSIC_URL = fileobj_to_data_url(up_menu_music, REPO_MENU_MUSIC)
-INGAME_MUSIC_URL = fileobj_to_data_url(up_ingame_music, REPO_INGAME_MUSIC)
-GAMEOVER_MUSIC_URL = fileobj_to_data_url(up_gameover_music, REPO_GAMEOVER_MUSIC)
+# -------------------------
+# Build & render embedded HTML/JS (escape JS braces by doubling)
+# -------------------------
+# Basic game configuration values (tweakable)
+GAME_SPEED = 3
+GRAVITY = 0.6
+JUMP_POWER = -11
+PIPE_GAP = 160
 
-# --------- Premium Game HTML ---------
-game_html = f'''
-<!DOCTYPE html>
-<html lang="en">
+game_html = f"""
+<!doctype html>
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Premium Flappy Bird</title>
-    <style>
-        * {{
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }}
-
-        body {{
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            overflow: hidden;
-        }}
-
-        .game-container {{
-            position: relative;
-            width: 95%;
-            max-width: 900px;
-            background: rgba(255, 255, 255, 0.1);
-            backdrop-filter: blur(20px);
-            border-radius: 20px;
-            padding: 20px;
-            box-shadow: 0 25px 50px rgba(0, 0, 0, 0.3);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-        }}
-
-        #gameCanvas {{
-            width: 100%;
-            height: 70vh;
-            background: #000;
-            border-radius: 15px;
-            display: block;
-            border: 3px solid rgba(255, 255, 255, 0.3);
-            box-shadow: inset 0 0 50px rgba(0, 0, 0, 0.5);
-        }}
-
-        .controls {{
-            position: absolute;
-            top: 20px;
-            left: 20px;
-            z-index: 100;
-            display: flex;
-            gap: 10px;
-        }}
-
-        .control-btn {{
-            background: linear-gradient(135deg, #667eea, #764ba2);
-            color: white;
-            border: none;
-            padding: 12px 20px;
-            border-radius: 10px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
-        }}
-
-        .control-btn:hover {{
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
-        }}
-
-        .score-display {{
-            position: absolute;
-            top: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: rgba(0, 0, 0, 0.7);
-            color: #ffd93d;
-            padding: 10px 25px;
-            border-radius: 25px;
-            font-size: 1.5rem;
-            font-weight: 700;
-            z-index: 100;
-            backdrop-filter: blur(10px);
-            border: 2px solid rgba(255, 217, 61, 0.3);
-        }}
-
-        .countdown {{
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            font-size: 6rem;
-            font-weight: 900;
-            color: #ffd93d;
-            text-shadow: 0 0 30px rgba(255, 217, 61, 0.8);
-            z-index: 200;
-            animation: pulse 1s infinite;
-        }}
-
-        @keyframes pulse {{
-            0%, 100% {{ transform: translate(-50%, -50%) scale(1); opacity: 1; }}
-            50% {{ transform: translate(-50%, -50%) scale(1.1); opacity: 0.7; }}
-        }}
-
-        .start-screen {{
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.85);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            z-index: 300;
-            border-radius: 15px;
-        }}
-
-        .start-content {{
-            text-align: center;
-            color: white;
-            padding: 40px;
-        }}
-
-        .start-title {{
-            font-size: 3.5rem;
-            font-weight: 800;
-            background: linear-gradient(135deg, #ffd93d, #ff6b6b);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            margin-bottom: 20px;
-        }}
-
-        .start-subtitle {{
-            font-size: 1.2rem;
-            color: #ccc;
-            margin-bottom: 30px;
-            line-height: 1.6;
-        }}
-
-        .start-btn {{
-            background: linear-gradient(135deg, #ff6b6b, #ffd93d);
-            color: white;
-            border: none;
-            padding: 20px 50px;
-            font-size: 1.5rem;
-            font-weight: 700;
-            border-radius: 15px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            box-shadow: 0 10px 30px rgba(255, 107, 107, 0.4);
-        }}
-
-        .start-btn:hover {{
-            transform: translateY(-5px);
-            box-shadow: 0 15px 40px rgba(255, 107, 107, 0.6);
-        }}
-
-        .game-over {{
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.9);
-            display: none;
-            justify-content: center;
-            align-items: center;
-            z-index: 400;
-            border-radius: 15px;
-        }}
-
-        .game-over-content {{
-            text-align: center;
-            color: white;
-            padding: 40px;
-        }}
-
-        .character-popup {{
-            position: absolute;
-            bottom: 50px;
-            left: 50%;
-            transform: translateX(-50%);
-            animation: float 3s ease-in-out infinite;
-        }}
-
-        @keyframes float {{
-            0%, 100% {{ transform: translateX(-50%) translateY(0px); }}
-            50% {{ transform: translateX(-50%) translateY(-20px); }}
-        }}
-
-        .bag-popup {{
-            position: absolute;
-            bottom: 120px;
-            left: 50%;
-            transform: translateX(-50%);
-            animation: float 3s ease-in-out infinite 0.5s;
-        }}
-
-        .final-score {{
-            font-size: 4rem;
-            font-weight: 800;
-            color: #ffd93d;
-            margin: 20px 0;
-            text-shadow: 0 0 20px rgba(255, 217, 61, 0.5);
-        }}
-
-        .restart-btn {{
-            background: linear-gradient(135deg, #4ecdc4, #44a08d);
-            color: white;
-            border: none;
-            padding: 15px 40px;
-            font-size: 1.2rem;
-            font-weight: 600;
-            border-radius: 10px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            margin-top: 20px;
-        }}
-
-        .restart-btn:hover {{
-            transform: translateY(-3px);
-            box-shadow: 0 10px 25px rgba(78, 205, 196, 0.4);
-        }}
-    </style>
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<style>
+body{{margin:0;background:#0b0b0b;color:#fff;font-family:sans-serif}}
+#wrap{{width:95%;max-width:1000px;margin:10px auto;position:relative}}
+canvas{{width:100%;height:70vh;background:#000;border-radius:10px;display:block}}
+#startBtn{{position:absolute;top:12px;right:12px;z-index:999;background:#ff4757;color:#fff;border:none;padding:10px 14px;border-radius:10px;font-weight:700}}
+#musicToggle{{position:absolute;top:12px;left:12px;z-index:999;background:#333;color:#fff;border:none;padding:8px 10px;border-radius:8px}}
+#scoreText{{position:absolute;top:14px;left:50%;transform:translateX(-50%);z-index:999;font-size:28px;font-weight:700}}
+.menuCard{{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none}}
+.menuInner{{background:rgba(0,0,0,0.6);padding:20px;border-radius:12px;pointer-events:all;text-align:center}}
+</style>
 </head>
 <body>
-    <div class="game-container">
-        <canvas id="gameCanvas"></canvas>
-        
-        <div class="controls">
-            <button class="control-btn" id="musicToggle">🔊 Music</button>
-            <button class="control-btn" id="startBtn">🚀 Start</button>
-        </div>
-        
-        <div class="score-display">
-            Score: <span id="score">0</span>
-        </div>
+<div id="wrap">
+  <div id="scoreText">Score: <span id="score">0</span></div>
+  <button id="musicToggle">Music ON</button>
+  <button id="startBtn">START</button>
 
-        <div class="countdown" id="countdown" style="display: none;">3</div>
-
-        <div class="start-screen" id="startScreen">
-            <div class="start-content">
-                <div class="start-title">🎮 Flappy Bird</div>
-                <div class="start-subtitle">
-                    Customize your game with amazing visuals and audio!<br>
-                    Avoid obstacles and achieve the highest score!
-                </div>
-                <button class="start-btn" id="mainStartBtn">START GAME</button>
-            </div>
-        </div>
-
-        <div class="game-over" id="gameOverScreen">
-            <div class="game-over-content">
-                <div style="font-size: 3rem; color: #ff6b6b; margin-bottom: 20px;">💀 Game Over</div>
-                <div class="final-score" id="finalScore">0</div>
-                <div style="color: #ccc; margin-bottom: 30px; font-size: 1.1rem;">
-                    Better luck next time! 🎯
-                </div>
-                <img src="{BAG_URL or PLAYER_URL}" class="bag-popup" style="width: 80px; height: 80px; border-radius: 10px;" alt="Bag">
-                <img src="{PLAYER_URL}" class="character-popup" style="width: 100px; height: 100px; border-radius: 15px;" alt="Character">
-                <br>
-                <button class="restart-btn" id="restartBtn">🔄 Play Again</button>
-            </div>
-        </div>
+  <div class="menuCard">
+    <div class="menuInner">
+      <h3>Welcome — Press PLAY to allow audio, then START</h3>
+      <button id="menuPlayBtn">PLAY</button>
+      <div id="bestText" style="margin-top:8px;color:#ddd;font-size:14px"></div>
     </div>
+  </div>
 
-    <script>
-        // Game Configuration
-        const CONFIG = {{
-            PLAYER_URL: "{PLAYER_URL}",
-            PIPE_URL: "{PIPE_URL}",
-            BG_URL: "{BG_URL}",
-            MENU_MUSIC_URL: {('"' + MENU_MUSIC_URL + '"') if MENU_MUSIC_URL else 'null'},
-            INGAME_MUSIC_URL: {('"' + INGAME_MUSIC_URL + '"') if INGAME_MUSIC_URL else 'null'},
-            GAMEOVER_MUSIC_URL: {('"' + GAMEOVER_MUSIC_URL + '"') if GAMEOVER_MUSIC_URL else 'null'},
-            GAME_SPEED: {game_speed},
-            GRAVITY: {gravity_strength},
-            JUMP_POWER: -{jump_power},
-            PIPE_GAP: {pipe_gap}
-        }};
+  <canvas id="c"></canvas>
+</div>
 
-        // Game State
-        let gameState = {{
-            menuAudio: null,
-            ingameAudio: null,
-            gameoverAudio: null,
-            musicEnabled: true,
-            gameRunning: false,
-            gameOver: false,
-            score: 0,
-            player: {{ x: 100, y: 200, vy: 0, size: 50 }},
-            pipes: [],
-            pipeTimer: 0,
-            lastTime: performance.now(),
-            images: {{ bg: null, player: null, pipe: null }},
-            countdownActive: false,
-            countdownValue: 3
-        }};
+<script>
+const PLAYER_URL = "{PLAYER_URL}";
+const PIPE_URL = "{PIPE_URL}";
+const BG_URL = "{BG_URL}";
+const MENU_MUSIC_URL = {('"' + MENU_MUSIC_URL + '"') if MENU_MUSIC_URL else 'null'};
+const INGAME_MUSIC_URL = {('"' + INGAME_MUSIC_URL + '"') if INGAME_MUSIC_URL else 'null'};
+const GAMEOVER_MUSIC_URL = {('"' + GAMEOVER_MUSIC_URL + '"') if GAMEOVER_MUSIC_URL else 'null'};
 
-        // DOM Elements
-        const elements = {{
-            canvas: document.getElementById('gameCanvas'),
-            startScreen: document.getElementById('startScreen'),
-            gameOverScreen: document.getElementById('gameOverScreen'),
-            countdown: document.getElementById('countdown'),
-            score: document.getElementById('score'),
-            finalScore: document.getElementById('finalScore'),
-            musicToggle: document.getElementById('musicToggle'),
-            startBtn: document.getElementById('startBtn'),
-            mainStartBtn: document.getElementById('mainStartBtn'),
-            restartBtn: document.getElementById('restartBtn')
-        }};
+let menuAudio = null;
+let ingameAudio = null;
+let gameoverAudio = null;
+let musicEnabled = true;
 
-        const ctx = elements.canvas.getContext('2d');
+if (MENU_MUSIC_URL) {{
+  menuAudio = new Audio(MENU_MUSIC_URL); menuAudio.loop = true; menuAudio.volume = 0.5;
+}}
+if (INGAME_MUSIC_URL) {{
+  ingameAudio = new Audio(INGAME_MUSIC_URL); ingameAudio.loop = true; ingameAudio.volume = 0.5;
+}}
+if (GAMEOVER_MUSIC_URL) {{
+  gameoverAudio = new Audio(GAMEOVER_MUSIC_URL); gameoverAudio.volume = 0.6;
+}}
 
-        // Initialize Game
-        function initGame() {{
-            setupEventListeners();
-            loadAssets();
-            setupAudio();
-            resizeCanvas();
-            renderMenu();
-        }}
+try {{
+  const m = localStorage.getItem('flappy_music_enabled');
+  if (m !== null) musicEnabled = m === '1';
+  document.getElementById('musicToggle').innerText = musicEnabled ? 'Music ON' : 'Music OFF';
+}} catch(e){{console.warn(e)}}
 
-        // Setup Event Listeners
-        function setupEventListeners() {{
-            // Window resize
-            window.addEventListener('resize', resizeCanvas);
+document.getElementById('musicToggle').addEventListener('click', () => {{
+  musicEnabled = !musicEnabled;
+  document.getElementById('musicToggle').innerText = musicEnabled ? 'Music ON' : 'Music OFF';
+  try {{ localStorage.setItem('flappy_music_enabled', musicEnabled ? '1' : '0'); }} catch(e){{}}
+  if (!musicEnabled) {{ if (menuAudio) menuAudio.pause(); if (ingameAudio) ingameAudio.pause(); if (gameoverAudio) gameoverAudio.pause(); }}
+  else {{ if (!gameRunning && menuAudio) menuAudio.play().catch(()=>{{}}); if (gameRunning && ingameAudio) ingameAudio.play().catch(()=>{{}}); }}
+}});
 
-            // Music toggle
-            elements.musicToggle.addEventListener('click', toggleMusic);
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+function resize(){{ canvas.width = Math.min(window.innerWidth*0.95,1000); canvas.height = Math.min(window.innerHeight*0.72,700); }}
+resize(); window.addEventListener('resize', resize);
 
-            // Start buttons
-            elements.mainStartBtn.addEventListener('click', startGame);
-            elements.startBtn.addEventListener('click', startGame);
-            elements.restartBtn.addEventListener('click', restartGame);
+let images = {{ bg:null, player:null, pipe:null }};
+function loadImage(url){{ return new Promise((res,rej) => {{ let i=new Image(); i.onload = ()=>res(i); i.onerror = rej; i.src = url; }})); }}
 
-            // Game controls
-            window.addEventListener('keydown', (e) => {{
-                if (e.code === 'Space' || e.key === 'ArrowUp') flap();
-            }});
-            elements.canvas.addEventListener('mousedown', flap);
-            elements.canvas.addEventListener('touchstart', (e) => {{
-                e.preventDefault();
-                flap();
-            }}, {{passive: false}});
-        }}
+async function loadAssets() {{
+  try {{
+    images.bg = BG_URL ? await loadImage(BG_URL) : null;
+  }} catch(e){{ console.warn('bg load failed', e); images.bg = null; }}
+  try {{
+    images.player = PLAYER_URL ? await loadImage(PLAYER_URL) : null;
+  }} catch(e){{ console.warn('player load failed', e); images.player = null; }}
+  try {{
+    images.pipe = PIPE_URL ? await loadImage(PIPE_URL) : null;
+  }} catch(e){{ console.warn('pipe load failed', e); images.pipe = null; }}
+}}
 
-        // Audio Management
-        function setupAudio() {{
-            if (CONFIG.MENU_MUSIC_URL) {{
-                gameState.menuAudio = new Audio(CONFIG.MENU_MUSIC_URL);
-                gameState.menuAudio.loop = true;
-                gameState.menuAudio.volume = 0.4;
-            }}
-            if (CONFIG.INGAME_MUSIC_URL) {{
-                gameState.ingameAudio = new Audio(CONFIG.INGAME_MUSIC_URL);
-                gameState.ingameAudio.loop = true;
-                gameState.ingameAudio.volume = 0.4;
-            }}
-            if (CONFIG.GAMEOVER_MUSIC_URL) {{
-                gameState.gameoverAudio = new Audio(CONFIG.GAMEOVER_MUSIC_URL);
-                gameState.gameoverAudio.volume = 0.4;
-            }}
+let gameRunning=false, gameOver=false, score=0;
+let player={{x:100,y:200,vy:0,size:48}}, gravity={GRAVITY}, jump={JUMP_POWER}, pipes=[], pipeGap={PIPE_GAP}, pipeTimer=0, last=performance.now();
 
-            // Load music preference
-            try {{
-                const saved = localStorage.getItem('flappy_music_enabled');
-                if (saved !== null) gameState.musicEnabled = saved === '1';
-                updateMusicButton();
-            }} catch (e) {{}}
-        }}
+function reset(){{ score=0; player.y = canvas.height/2; player.vy = 0; pipes=[]; gameOver=false; document.getElementById('score').innerText = 0; }}
+function spawnPipe(){{ const margin = Math.floor(canvas.height*0.12); const center = Math.floor(Math.random()*(canvas.height-margin*2-pipeGap)+margin+pipeGap/2); pipes.push({{x:canvas.width+100,center,scored:false}}); }}
 
-        function toggleMusic() {{
-            gameState.musicEnabled = !gameState.musicEnabled;
-            updateMusicButton();
-            try {{
-                localStorage.setItem('flappy_music_enabled', gameState.musicEnabled ? '1' : '0');
-            }} catch (e) {{}}
+function update(dt){{ if(!gameRunning||gameOver) return; pipeTimer += dt; if(pipeTimer>1400){pipeTimer=0;spawnPipe();} for(let p of pipes) p.x -= {GAME_SPEED}*(dt/1000)*60*0.05; if(pipes.length&&pipes[0].x+120<0) pipes.shift(); player.vy += gravity*(dt/16); player.y += player.vy*(dt/16); for(let p of pipes){{ const w = Math.floor(canvas.width*0.09); const topH = p.center - (pipeGap/2); const bottomY = p.center + (pipeGap/2); if(!p.scored && p.x + w < player.x){ p.scored = true; score++; document.getElementById('score').innerText = score; } // collision (AABB)
+ const rect = {{x:player.x,y:player.y,w:player.size,h:player.size}};
+ const topRect = {{x:p.x,y:0,w:w,h:topH}};
+ const botRect = {{x:p.x,y:bottomY,w:w,h:canvas.height-bottomY}};
+ if(checkRectCollision(rect, topRect) || checkRectCollision(rect, botRect)){{ gameOver = true; }}
+}} if(player.y + player.size > canvas.height) gameOver = true; }}
 
-            if (!gameState.musicEnabled) {{
-                stopAllAudio();
-            }} else {{
-                playCurrentAudio();
-            }}
-        }}
+function checkRectCollision(r1,r2){{ return r1.x < r2.x + r2.w && r1.x + r1.w > r2.x && r1.y < r2.y + r2.h && r1.y + r1.h > r2.y; }}
 
-        function updateMusicButton() {{
-            elements.musicToggle.textContent = gameState.musicEnabled ? '🔊 Music' : '🔇 Music';
-        }}
+function render(){{ ctx.clearRect(0,0,canvas.width,canvas.height); if(images.bg) ctx.drawImage(images.bg,0,0,canvas.width,canvas.height); else {{ ctx.fillStyle='#000'; ctx.fillRect(0,0,canvas.width,canvas.height); }} for(let p of pipes){{ const w = Math.floor(canvas.width*0.09); const topH = p.center - (pipeGap/2); if(images.pipe){{ ctx.drawImage(images.pipe,p.x,0,w,topH); ctx.drawImage(images.pipe,p.x,p.center+(pipeGap/2),w,canvas.height-(p.center+(pipeGap/2))); }} else {{ ctx.fillStyle='#217a4a'; ctx.fillRect(p.x,0,w,topH); ctx.fillRect(p.x,p.center+(pipeGap/2),w,canvas.height-(p.center+(pipeGap/2))); }} }} if(images.player) ctx.drawImage(images.player,player.x,player.y,player.size,player.size); else {{ ctx.fillStyle='#f1c40f'; ctx.fillRect(player.x,player.y,player.size,player.size); }} if(gameOver){{ ctx.fillStyle='rgba(0,0,0,0.5)'; ctx.fillRect(0,0,canvas.width,canvas.height); ctx.fillStyle='#fff'; ctx.font='36px sans-serif'; ctx.textAlign='center'; ctx.fillText('GAME OVER - Score: ' + score, canvas.width/2, canvas.height/2); }} }}
 
-        function stopAllAudio() {{
-            if (gameState.menuAudio) gameState.menuAudio.pause();
-            if (gameState.ingameAudio) gameState.ingameAudio.pause();
-            if (gameState.gameoverAudio) gameState.gameoverAudio.pause();
-        }}
+function flap(){{ if(!gameRunning||gameOver) return; player.vy = jump; }}
+window.addEventListener('keydown',(e)=>{{ if(e.code === 'Space') flap(); }});
+canvas.addEventListener('mousedown',()=>{{ flap(); }});
+canvas.addEventListener('touchstart',(e)=>{{ e.preventDefault(); flap(); }},{passive:false});
 
-        function playCurrentAudio() {{
-            if (!gameState.musicEnabled) return;
-            
-            if (gameState.gameOver && gameState.gameoverAudio) {{
-                gameState.gameoverAudio.play().catch(() => {{}});
-            }} else if (gameState.gameRunning && gameState.ingameAudio) {{
-                gameState.ingameAudio.play().catch(() => {{}});
-            }} else if (gameState.menuAudio) {{
-                gameState.menuAudio.play().catch(() => {{}});
-            }}
-        }}
+function loop(t){{ const dt = t - last; last = t; update(dt); render(); if(!gameOver) requestAnimationFrame(loop); else {{ if(ingameAudio) ingameAudio.pause(); try{{ const prev = parseInt(localStorage.getItem('flappy_best')||'0'); if(score>prev) localStorage.setItem('flappy_best',String(score)); }}catch(e){{}} }} }}
 
-        // Asset Loading
-        function loadImage(url) {{
-            return new Promise((resolve, reject) => {{
-                const img = new Image();
-                img.onload = () => resolve(img);
-                img.onerror = reject;
-                img.src = url;
-            }});
-        }}
+document.getElementById('menuPlayBtn').addEventListener('click', ()=>{{ if(menuAudio && musicEnabled) menuAudio.play().catch(()=>{{}}); }});
+document.getElementById('startBtn').addEventListener('click', ()=>{{ if(!gameRunning){{ gameRunning = true; if(menuAudio) menuAudio.pause(); if(ingameAudio && musicEnabled) ingameAudio.play().catch(()=>{{}}); reset(); last = performance.now(); requestAnimationFrame(loop); }} else {{ reset(); gameOver = false; if(ingameAudio && musicEnabled){ ingameAudio.currentTime = 0; ingameAudio.play().catch(()=>{{}}); } last = performance.now(); requestAnimationFrame(loop); }} }});
 
-        async function loadAssets() {{
-            try {{
-                if (CONFIG.BG_URL) gameState.images.bg = await loadImage(CONFIG.BG_URL);
-                if (CONFIG.PLAYER_URL) gameState.images.player = await loadImage(CONFIG.PLAYER_URL);
-                if (CONFIG.PIPE_URL) gameState.images.pipe = await loadImage(CONFIG.PIPE_URL);
-            }} catch (error) {{
-                console.warn('Failed to load some assets:', error);
-            }}
-        }}
+loadAssets().then(()=>{{ // show best score
+ try{{ const b = parseInt(localStorage.getItem('flappy_best')||'0'); if(b>0) document.getElementById('bestText').innerText = 'Best: ' + b; }}catch(e){{}}
+ render();
+}}).catch(e=>{{ console.warn(e); render(); }});
 
-        // Game Flow
-        function startGame() {{
-            elements.startScreen.style.display = 'none';
-            gameState.gameRunning = true;
-            gameState.gameOver = false;
-            
-            if (gameState.menuAudio) gameState.menuAudio.pause();
-            
-            startCountdown();
-        }}
-
-        function startCountdown() {{
-            gameState.countdownActive = true;
-            gameState.countdownValue = 3;
-            elements.countdown.style.display = 'block';
-            elements.countdown.textContent = gameState.countdownValue;
-
-            const countdownInterval = setInterval(() => {{
-                gameState.countdownValue--;
-                elements.countdown.textContent = gameState.countdownValue;
-
-                if (gameState.countdownValue <= 0) {{
-                    clearInterval(countdownInterval);
-                    elements.countdown.style.display = 'none';
-                    gameState.countdownActive = false;
-                    resetGame();
-                    gameState.lastTime = performance.now();
-                    if (gameState.musicEnabled && gameState.ingameAudio) {{
-                        gameState.ingameAudio.play().catch(() => {{}});
-                    }}
-                    requestAnimationFrame(gameLoop);
-                }}
-            }}, 1000);
-        }}
-
-        function restartGame() {{
-            elements.gameOverScreen.style.display = 'none';
-            startGame();
-        }}
-
-        function endGame() {{
-            gameState.gameRunning = false;
-            gameState.gameOver = true;
-
-            if (gameState.ingameAudio) gameState.ingameAudio.pause();
-            
-            elements.finalScore.textContent = gameState.score;
-            elements.gameOverScreen.style.display = 'flex';
-
-            if (gameState.musicEnabled && gameState.gameoverAudio) {{
-                gameState.gameoverAudio.currentTime = 0;
-                gameState.gameoverAudio.play().catch(() => {{}});
-            }}
-
-            // Save best score
-            try {{
-                const best = parseInt(localStorage.getItem('flappy_best') || '0');
-                if (gameState.score > best) {{
-                    localStorage.setItem('flappy_best', gameState.score.toString());
-                }}
-            }} catch (e) {{}}
-        }}
-
-        // Game Logic
-        function resetGame() {{
-            gameState.score = 0;
-            gameState.player.y = elements.canvas.height / 2;
-            gameState.player.vy = 0;
-            gameState.pipes = [];
-            gameState.pipeTimer = 0;
-            elements.score.textContent = '0';
-        }}
-
-        function spawnPipe() {{
-            const margin = elements.canvas.height * 0.15;
-            const center = Math.random() * (elements.canvas.height - margin * 2 - CONFIG.PIPE_GAP) + margin + CONFIG.PIPE_GAP / 2;
-            gameState.pipes.push({{ x: elements.canvas.width + 100, center, scored: false }});
-        }}
-
-        function update(deltaTime) {{
-            if (!gameState.gameRunning || gameState.gameOver || gameState.countdownActive) return;
-
-            // Spawn pipes
-            gameState.pipeTimer += deltaTime;
-            if (gameState.pipeTimer > 1800) {{
-                gameState.pipeTimer = 0;
-                spawnPipe();
-            }}
-
-            // Update pipes
-            gameState.pipes.forEach(pipe => {{
-                pipe.x -= (CONFIG.GAME_SPEED * 0.8) * (deltaTime / 16);
-            }});
-
-            // Remove off-screen pipes
-            if (gameState.pipes.length > 0 && gameState.pipes[0].x + 120 < 0) {{
-                gameState.pipes.shift();
-            }}
-
-            // Update player
-            gameState.player.vy += CONFIG.GRAVITY * (deltaTime / 16);
-            gameState.player.y += gameState.player.vy * (deltaTime / 16);
-
-            // Check collisions
-            checkCollisions();
-
-            // Check boundaries
-            if (gameState.player.y + gameState.player.size > elements.canvas.height - 10) {{
-                endGame();
-            }}
-            if (gameState.player.y < 0) {{
-                gameState.player.y = 0;
-                gameState.player.vy = 0;
-            }}
-        }}
-
-        function checkCollisions() {{
-            const playerRect = {{
-                x: gameState.player.x,
-                y: gameState.player.y,
-                width: gameState.player.size,
-                height: gameState.player.size
-            }};
-
-            for (const pipe of gameState.pipes) {{
-                const pipeWidth = elements.canvas.width * 0.08;
-                const topHeight = pipe.center - (CONFIG.PIPE_GAP / 2);
-                const bottomY = pipe.center + (CONFIG.PIPE_GAP / 2);
-
-                // Score point
-                if (!pipe.scored && pipe.x + pipeWidth < gameState.player.x) {{
-                    pipe.scored = true;
-                    gameState.score++;
-                    elements.score.textContent = gameState.score;
-                }}
-
-                // Collision detection
-                const topPipe = {{ x: pipe.x, y: 0, width: pipeWidth, height: topHeight }};
-                const bottomPipe = {{ x: pipe.x, y: bottomY, width: pipeWidth, height: elements.canvas.height - bottomY }};
-
-                if (checkRectCollision(playerRect, topPipe) || checkRectCollision(playerRect, bottomPipe)) {{
-                    endGame();
-                    return;
-                }}
-            }}
-        }}
-
-        function checkRectCollision(rect1, rect2) {{
-            return rect1.x < rect2.x + rect2.width &&
-                   rect1.x + rect1.width > rect2.x &&
-                   rect1.y < rect2.y + rect2.height &&
-                   rect1.y + rect1.height > rect2.y;
-        }}
-
-        function flap() {{
-            if (!gameState.gameRunning || gameState.gameOver || gameState.countdownActive) return;
-            gameState.player.vy = CONFIG.JUMP_POWER;
-        }}
-
-        // Rendering
-        function render() {{
-            // Clear canvas
-            ctx.fillStyle = '#000';
-            ctx.fillRect(0, 0, elements.canvas.width, elements.canvas.height);
-
-            // Draw background
-            if (gameState.images.bg) {{
-                ctx.drawImage(gameState.images.bg, 0, 0, elements.canvas.width, elements.canvas.height);
-            }} else {{
-                const gradient = ctx.createLinearGradient(0, 0, elements.canvas.width, elements.canvas.height);
-                gradient.addColorStop(0, '#1e3c72');
-                gradient.addColorStop(1, '#2a5298');
-                ctx.fillStyle = gradient;
-                ctx.fillRect(0, 0, elements.canvas.width, elements.canvas.height);
-            }}
-
-            // Draw pipes
-            gameState.pipes.forEach(pipe => {{
-                const pipeWidth = elements.canvas.width * 0.08;
-                const topHeight = pipe.center - (CONFIG.PIPE_GAP / 2);
-
-                if (gameState.images.pipe) {{
-                    ctx.drawImage(gameState.images.pipe, pipe.x, 0, pipeWidth, topHeight);
-                    ctx.drawImage(gameState.images.pipe, pipe.x, pipe.center + (CONFIG.PIPE_GAP / 2), pipeWidth, elements.canvas.height - (pipe.center + (CONFIG.PIPE_GAP / 2)));
-                }} else {{
-                    const pipeGradient = ctx.createLinearGradient(pipe.x, 0, pipe.x + pipeWidth, 0);
-                    pipeGradient.addColorStop(0, '#2ecc71');
-                    pipeGradient.addColorStop(1, '#27ae60');
-                    ctx.fillStyle = pipeGradient;
-                    ctx.fillRect(pipe.x, 0, pipeWidth, topHeight);
-                    ctx.fillRect(pipe.x, pipe.center + (CONFIG.PIPE_GAP / 2), pipeWidth, elements.canvas.height - (pipe.center + (CONFIG.PIPE_GAP / 2)));
-                }}
-            }});
-
-            // Draw player
-            if (gameState.images.player) {{
-                ctx.drawImage(gameState.images.player, gameState.player.x, gameState.player.y, gameState.player.size, gameState.player.size);
-            }} else {{
-                ctx.fillStyle = '#f1c40f';
-                ctx.fillRect(gameState.player.x, gameState.player.y, gameState.player.size, gameState.player.size);
-            }}
-        }}
-
-        function renderMenu() {{
-            render();
-        }}
-
-        // Game Loop
-        function gameLoop(currentTime) {{
-            const deltaTime = currentTime - gameState.lastTime;
-            gameState.lastTime = currentTime;
-
-            update(deltaTime);
-            render();
-
-            if (gameState.gameRunning && !gameState.gameOver) {{
-                requestAnimationFrame(gameLoop);
-            }}
-        }}
-
-        // Utility Functions
-        function resizeCanvas() {{
-            elements.canvas.width = Math.min(window.innerWidth * 0.95, 900);
-            elements.canvas.height = Math.min(window.innerHeight * 0.7, 600);
-            if (!gameState.gameRunning) {{
-                renderMenu();
-            }}
-        }}
-
-        // Start the game when page loads
-        window.addEventListener('load', initGame);
-    </script>
+</script>
 </body>
 </html>
-'''
+"""
 
-# Render the game
+# Render
 st.components.v1.html(game_html, height=800, scrolling=False)
 
-# Features Section
+# final instructions
 st.markdown("---")
-st.markdown("## 🎯 Premium Features")
-
-col1, col2, col3 = st.columns(3)
-
-with col1:
-    st.markdown("""
-    ### 🎨 Visual Excellence
-    - **High-quality graphics**
-    - **Smooth animations** 
-    - **Character pop-up effects**
-    - **Professional UI/UX**
-    """)
-
-with col2:
-    st.markdown("""
-    ### 🎵 Audio Mastery
-    - **Menu music system**
-    - **In-game soundtrack**
-    - **Game-over music**
-    - **Audio controls**
-    """)
-
-with col3:
-    st.markdown("""
-    ### ⚡ Game Enhancements
-    - **3-second countdown**
-    - **Customizable difficulty**
-    - **Score tracking**
-    - **Responsive design**
-    """)
-
-st.markdown("---")
-st.markdown("### 🎮 How to Play")
+st.markdown("**How it loads assets now:**")
 st.markdown("""
-1. **Customize** your game using the sidebar options
-2. **Click START GAME** to begin with a 3-second countdown
-3. **Press SPACE, CLICK, or ARROW UP** to make the bird jump
-4. **Avoid obstacles** and score points
-5. **Enjoy** your customized gaming experience!
+- Auto searches `./assets/images/` for `background_image.png`, `player_character.png`, `obstacle_enemy.png` (preferred).
+- If not found it will try repo root filenames.
+- Auto collects `.mp3` files from `./assets/sounds/` (or repo root) and selects menu/in-game/gameover tracks heuristically.
+- You can optionally override assets from the sidebar (but it's not required).
+- If required images are missing, the game uses clean shape fallbacks and shows a warning message (no crash).
 """)
