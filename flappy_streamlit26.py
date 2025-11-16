@@ -3,34 +3,91 @@ import streamlit as st
 import base64
 import os
 
-st.set_page_config(page_title="Easy Flappy Bird", layout="wide")
-st.title("🎮 Easy Flappy Bird - Customize Your Game!")
-st.write("Aap apni pasand ka background, character, obstacles aur music set kar sakte hain!")
+st.set_page_config(page_title="Premium Flappy Bird", layout="wide", page_icon="🐦")
 
-# --------- Left side: Easy Uploaders ---------
+# Custom CSS for premium look
+st.markdown("""
+<style>
+    .main-header {
+        font-size: 3rem;
+        font-weight: 800;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        text-align: center;
+        margin-bottom: 1rem;
+    }
+    .sub-header {
+        text-align: center;
+        color: #666;
+        margin-bottom: 2rem;
+        font-size: 1.2rem;
+    }
+    .sidebar .sidebar-content {
+        background: linear-gradient(180deg, #f8f9fa 0%, #e9ecef 100%);
+    }
+    .upload-section {
+        background: white;
+        padding: 1.5rem;
+        border-radius: 15px;
+        margin: 1rem 0;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        border: 1px solid #e0e0e0;
+    }
+    .stButton button {
+        width: 100%;
+        border-radius: 10px;
+        font-weight: 600;
+        padding: 0.75rem;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border: none;
+        transition: all 0.3s ease;
+    }
+    .stButton button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+    }
+</style>
+""", unsafe_allow_html=True)
+
+st.markdown('<div class="main-header">🎮 Premium Flappy Bird</div>', unsafe_allow_html=True)
+st.markdown('<div class="sub-header">Customize your gaming experience with stunning visuals and audio</div>', unsafe_allow_html=True)
+
+# --------- Premium Sidebar Design ---------
 with st.sidebar:
-    st.header("🎨 Game Customization")
+    st.markdown("### 🎨 Game Studio")
     
-    st.subheader("🖼️ Images")
-    up_bg = st.file_uploader("Background Image", type=["png","jpg","jpeg"], key="bg")
-    up_player = st.file_uploader("Player Character", type=["png","jpg","jpeg"], key="player")
-    up_pipe = st.file_uploader("Obstacles", type=["png","jpg","jpeg"], key="pipe")
-    
-    st.markdown("---")
-    st.subheader("🎵 Music")
-    up_menu_music = st.file_uploader("Menu Music", type=["mp3","ogg","wav"], key="menu_music")
-    up_ingame_music = st.file_uploader("Game Music", type=["mp3","ogg","wav"], key="ingame_music")
-    
-    st.markdown("---")
-    st.subheader("⚙️ Game Settings")
-    game_speed = st.slider("Game Speed", 1, 10, 3)
-    gravity_strength = st.slider("Gravity", 0.1, 1.0, 0.5)
-    jump_power = st.slider("Jump Power", 5, 20, 12)
-    
-    st.markdown("---")
-    st.success("✅ Upload karne ke baad game automatically update ho jayega!")
+    with st.container():
+        st.markdown("#### 🖼️ Visual Assets")
+        with st.expander("Upload Images", expanded=True):
+            up_bg = st.file_uploader("🌅 Background", type=["png","jpg","jpeg"], key="bg")
+            up_player = st.file_uploader("🐦 Player Character", type=["png","jpg","jpeg"], key="player")
+            up_pipe = st.file_uploader("🚧 Obstacles", type=["png","jpg","jpeg"], key="pipe")
+            up_bag = st.file_uploader("💼 Character's Bag", type=["png","jpg","jpeg"], key="bag")
 
-# --------- Helper: convert uploaded file or repo file to data URL ---------
+    with st.container():
+        st.markdown("#### 🎵 Audio Library")
+        with st.expander("Music Settings", expanded=True):
+            up_menu_music = st.file_uploader("🏠 Menu Music", type=["mp3","ogg","wav"], key="menu_music")
+            up_ingame_music = st.file_uploader("🎮 Game Music", type=["mp3","ogg","wav"], key="ingame_music")
+            up_gameover_music = st.file_uploader("💀 Game Over Music", type=["mp3","ogg","wav"], key="gameover_music")
+
+    with st.container():
+        st.markdown("#### ⚙️ Game Settings")
+        with st.expander("Difficulty & Controls", expanded=True):
+            col1, col2 = st.columns(2)
+            with col1:
+                game_speed = st.slider("Speed", 1, 10, 3)
+                gravity_strength = st.slider("Gravity", 0.1, 1.0, 0.5)
+            with col2:
+                jump_power = st.slider("Jump Power", 5, 20, 12)
+                pipe_gap = st.slider("Pipe Gap", 120, 250, 180)
+
+    st.markdown("---")
+    st.success("🎯 **Pro Tip**: Upload high-quality assets for the best gaming experience!")
+
+# --------- File Processing ---------
 def fileobj_to_data_url(fileobj, default_path=None):
     if fileobj is not None:
         raw = fileobj.read()
@@ -62,496 +119,735 @@ def fileobj_to_data_url(fileobj, default_path=None):
         return f"data:{mime};base64," + base64.b64encode(raw).decode()
     return None
 
-# repo fallback names
+# File mappings
 REPO_BG = "background_image.png"
 REPO_PLAYER = "player_character.png"
 REPO_PIPE = "obstacle_enemy.png"
+REPO_BAG = "player_character.png"  # Fallback to player image
 REPO_MENU_MUSIC = "Home Screen Music (Only on Menu Screen).mp3"
 REPO_INGAME_MUSIC = "ingame_music_1.mp3"
+REPO_GAMEOVER_MUSIC = "ingame_music_2.mp3"
 
+# Process files
 BG_URL = fileobj_to_data_url(up_bg, REPO_BG) or ""
 PLAYER_URL = fileobj_to_data_url(up_player, REPO_PLAYER) or ""
 PIPE_URL = fileobj_to_data_url(up_pipe, REPO_PIPE) or ""
+BAG_URL = fileobj_to_data_url(up_bag, REPO_BAG) or ""
 MENU_MUSIC_URL = fileobj_to_data_url(up_menu_music, REPO_MENU_MUSIC)
 INGAME_MUSIC_URL = fileobj_to_data_url(up_ingame_music, REPO_INGAME_MUSIC)
+GAMEOVER_MUSIC_URL = fileobj_to_data_url(up_gameover_music, REPO_GAMEOVER_MUSIC)
 
-# --------- Generate embedded HTML + JS ---------
-game_html = f"""
-<!doctype html>
-<html>
+# --------- Premium Game HTML ---------
+game_html = f'''
+<!DOCTYPE html>
+<html lang="en">
 <head>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<style>
-  body {{ 
-    margin:0; 
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color:#fff; 
-    font-family:'Arial', sans-serif; 
-  }}
-  #canvasWrap {{ 
-    width:95%; 
-    max-width:900px; 
-    margin: 10px auto; 
-    position:relative; 
-    background: rgba(255,255,255,0.1);
-    border-radius:15px;
-    padding:10px;
-    backdrop-filter: blur(10px);
-  }}
-  canvas {{ 
-    width:100%; 
-    height:65vh; 
-    background:#000; 
-    border-radius:10px; 
-    display:block; 
-    border: 3px solid #fff;
-    box-shadow: 0 8px 25px rgba(0,0,0,0.3);
-  }}
-  #startBtn {{ 
-    position:absolute; 
-    top:15px; 
-    right:15px; 
-    z-index:999; 
-    background:#ff6b6b; 
-    color:#fff; 
-    border:none; 
-    padding:12px 20px; 
-    border-radius:10px; 
-    font-weight:700;
-    font-size:16px;
-    cursor:pointer;
-    transition: all 0.3s ease;
-    box-shadow: 0 4px 15px rgba(255,107,107,0.4);
-  }}
-  #startBtn:hover {{ background:#ff5252; transform: scale(1.05); }}
-  
-  #musicToggle {{ 
-    position:absolute; 
-    top:15px; 
-    left:15px; 
-    z-index:999; 
-    background:#4ecdc4; 
-    color:#fff; 
-    border:none; 
-    padding:10px 15px; 
-    border-radius:8px; 
-    cursor:pointer;
-    font-weight:600;
-    transition: all 0.3s ease;
-  }}
-  #musicToggle:hover {{ background:#45b7af; }}
-  
-  #menuOverlay {{ 
-    position:absolute; 
-    inset:0; 
-    display:flex; 
-    align-items:center; 
-    justify-content:center; 
-    z-index:500; 
-    pointer-events:none; 
-    background: rgba(0,0,0,0.7);
-    border-radius:10px;
-  }}
-  #menuCard {{ 
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    padding:25px 30px; 
-    border-radius:15px; 
-    text-align:center; 
-    pointer-events:all;
-    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-    border: 2px solid rgba(255,255,255,0.2);
-  }}
-  #menuCard h3 {{ 
-    margin:0 0 15px 0; 
-    font-size:24px; 
-    color:#fff;
-    text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
-  }}
-  #menuCard p {{ 
-    margin:0 0 20px 0; 
-    font-size:14px; 
-    opacity:0.9;
-    line-height:1.5;
-  }}
-  #menuCard button {{ 
-    margin-top:5px; 
-    padding:12px 25px; 
-    font-weight:700; 
-    border-radius:10px; 
-    border:none; 
-    background:#ffd93d; 
-    color:#333;
-    font-size:16px;
-    cursor:pointer;
-    transition: all 0.3s ease;
-    box-shadow: 0 4px 15px rgba(255,217,61,0.4);
-  }}
-  #menuCard button:hover {{ 
-    background:#ffcd00; 
-    transform: scale(1.05);
-  }}
-  #scoreText {{ 
-    position:absolute; 
-    top:15px; 
-    left:50%; 
-    transform:translateX(-50%); 
-    z-index:999; 
-    font-size:32px; 
-    font-weight:900;
-    color:#ffd93d;
-    text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
-  }}
-  #controlsInfo {{
-    position:absolute;
-    bottom:15px;
-    left:50%;
-    transform:translateX(-50%);
-    z-index:999;
-    background:rgba(0,0,0,0.7);
-    padding:8px 15px;
-    border-radius:20px;
-    font-size:14px;
-    color:#ffd93d;
-  }}
-  .easy-mode {{ 
-    position:absolute;
-    top:70px;
-    left:15px;
-    z-index:999;
-    background:rgba(46, 204, 113, 0.9);
-    color:white;
-    padding:5px 10px;
-    border-radius:15px;
-    font-size:12px;
-    font-weight:bold;
-  }}
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Premium Flappy Bird</title>
+    <style>
+        * {{
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }}
+
+        body {{
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+        }}
+
+        .game-container {{
+            position: relative;
+            width: 95%;
+            max-width: 900px;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(20px);
+            border-radius: 20px;
+            padding: 20px;
+            box-shadow: 0 25px 50px rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }}
+
+        #gameCanvas {{
+            width: 100%;
+            height: 70vh;
+            background: #000;
+            border-radius: 15px;
+            display: block;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            box-shadow: inset 0 0 50px rgba(0, 0, 0, 0.5);
+        }}
+
+        .controls {{
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 100;
+            display: flex;
+            gap: 10px;
+        }}
+
+        .control-btn {{
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 10px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+        }}
+
+        .control-btn:hover {{
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+        }}
+
+        .score-display {{
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.7);
+            color: #ffd93d;
+            padding: 10px 25px;
+            border-radius: 25px;
+            font-size: 1.5rem;
+            font-weight: 700;
+            z-index: 100;
+            backdrop-filter: blur(10px);
+            border: 2px solid rgba(255, 217, 61, 0.3);
+        }}
+
+        .countdown {{
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 6rem;
+            font-weight: 900;
+            color: #ffd93d;
+            text-shadow: 0 0 30px rgba(255, 217, 61, 0.8);
+            z-index: 200;
+            animation: pulse 1s infinite;
+        }}
+
+        @keyframes pulse {{
+            0%, 100% {{ transform: translate(-50%, -50%) scale(1); opacity: 1; }}
+            50% {{ transform: translate(-50%, -50%) scale(1.1); opacity: 0.7; }}
+        }}
+
+        .start-screen {{
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.85);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 300;
+            border-radius: 15px;
+        }}
+
+        .start-content {{
+            text-align: center;
+            color: white;
+            padding: 40px;
+        }}
+
+        .start-title {{
+            font-size: 3.5rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, #ffd93d, #ff6b6b);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 20px;
+        }}
+
+        .start-subtitle {{
+            font-size: 1.2rem;
+            color: #ccc;
+            margin-bottom: 30px;
+            line-height: 1.6;
+        }}
+
+        .start-btn {{
+            background: linear-gradient(135deg, #ff6b6b, #ffd93d);
+            color: white;
+            border: none;
+            padding: 20px 50px;
+            font-size: 1.5rem;
+            font-weight: 700;
+            border-radius: 15px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 10px 30px rgba(255, 107, 107, 0.4);
+        }}
+
+        .start-btn:hover {{
+            transform: translateY(-5px);
+            box-shadow: 0 15px 40px rgba(255, 107, 107, 0.6);
+        }}
+
+        .game-over {{
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.9);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 400;
+            border-radius: 15px;
+        }}
+
+        .game-over-content {{
+            text-align: center;
+            color: white;
+            padding: 40px;
+        }}
+
+        .character-popup {{
+            position: absolute;
+            bottom: 50px;
+            left: 50%;
+            transform: translateX(-50%);
+            animation: float 3s ease-in-out infinite;
+        }}
+
+        @keyframes float {{
+            0%, 100% {{ transform: translateX(-50%) translateY(0px); }}
+            50% {{ transform: translateX(-50%) translateY(-20px); }}
+        }}
+
+        .bag-popup {{
+            position: absolute;
+            bottom: 120px;
+            left: 50%;
+            transform: translateX(-50%);
+            animation: float 3s ease-in-out infinite 0.5s;
+        }}
+
+        .final-score {{
+            font-size: 4rem;
+            font-weight: 800;
+            color: #ffd93d;
+            margin: 20px 0;
+            text-shadow: 0 0 20px rgba(255, 217, 61, 0.5);
+        }}
+
+        .restart-btn {{
+            background: linear-gradient(135deg, #4ecdc4, #44a08d);
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            font-size: 1.2rem;
+            font-weight: 600;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-top: 20px;
+        }}
+
+        .restart-btn:hover {{
+            transform: translateY(-3px);
+            box-shadow: 0 10px 25px rgba(78, 205, 196, 0.4);
+        }}
+    </style>
 </head>
 <body>
-<div id="canvasWrap">
-  <div class="easy-mode">✨ EASY MODE ✨</div>
-  <div id="scoreText">Score: <span id="score">0</span></div>
-  <button id="musicToggle">🔊 Music ON</button>
-  <button id="startBtn">🎮 START GAME</button>
-  <div id="controlsInfo">🔼 SPACE / CLICK / TOUCH to JUMP</div>
+    <div class="game-container">
+        <canvas id="gameCanvas"></canvas>
+        
+        <div class="controls">
+            <button class="control-btn" id="musicToggle">🔊 Music</button>
+            <button class="control-btn" id="startBtn">🚀 Start</button>
+        </div>
+        
+        <div class="score-display">
+            Score: <span id="score">0</span>
+        </div>
 
-  <div id="menuOverlay">
-    <div id="menuCard">
-      <h3>🚀 Welcome to Easy Flappy Bird!</h3>
-      <p>Upload your favorite images and music from the sidebar!<br>
-      Game automatically becomes easier with your settings!</p>
-      <button id="menuPlayBtn">🎵 PLAY MUSIC</button>
+        <div class="countdown" id="countdown" style="display: none;">3</div>
+
+        <div class="start-screen" id="startScreen">
+            <div class="start-content">
+                <div class="start-title">🎮 Flappy Bird</div>
+                <div class="start-subtitle">
+                    Customize your game with amazing visuals and audio!<br>
+                    Avoid obstacles and achieve the highest score!
+                </div>
+                <button class="start-btn" id="mainStartBtn">START GAME</button>
+            </div>
+        </div>
+
+        <div class="game-over" id="gameOverScreen">
+            <div class="game-over-content">
+                <div style="font-size: 3rem; color: #ff6b6b; margin-bottom: 20px;">💀 Game Over</div>
+                <div class="final-score" id="finalScore">0</div>
+                <div style="color: #ccc; margin-bottom: 30px; font-size: 1.1rem;">
+                    Better luck next time! 🎯
+                </div>
+                <img src="{BAG_URL or PLAYER_URL}" class="bag-popup" style="width: 80px; height: 80px; border-radius: 10px;" alt="Bag">
+                <img src="{PLAYER_URL}" class="character-popup" style="width: 100px; height: 100px; border-radius: 15px;" alt="Character">
+                <br>
+                <button class="restart-btn" id="restartBtn">🔄 Play Again</button>
+            </div>
+        </div>
     </div>
-  </div>
 
-  <canvas id="c"></canvas>
-</div>
+    <script>
+        // Game Configuration
+        const CONFIG = {{
+            PLAYER_URL: "{PLAYER_URL}",
+            PIPE_URL: "{PIPE_URL}",
+            BG_URL: "{BG_URL}",
+            MENU_MUSIC_URL: {('"' + MENU_MUSIC_URL + '"') if MENU_MUSIC_URL else 'null'},
+            INGAME_MUSIC_URL: {('"' + INGAME_MUSIC_URL + '"') if INGAME_MUSIC_URL else 'null'},
+            GAMEOVER_MUSIC_URL: {('"' + GAMEOVER_MUSIC_URL + '"') if GAMEOVER_MUSIC_URL else 'null'},
+            GAME_SPEED: {game_speed},
+            GRAVITY: {gravity_strength},
+            JUMP_POWER: -{jump_power},
+            PIPE_GAP: {pipe_gap}
+        }};
 
-<script>
-const PLAYER_URL = "{PLAYER_URL}";
-const PIPE_URL = "{PIPE_URL}";
-const BG_URL = "{BG_URL}";
-const MENU_MUSIC_URL = {('"' + MENU_MUSIC_URL + '"') if MENU_MUSIC_URL else 'null'};
-const INGAME_MUSIC_URL = {('"' + INGAME_MUSIC_URL + '"') if INGAME_MUSIC_URL else 'null'};
+        // Game State
+        let gameState = {{
+            menuAudio: null,
+            ingameAudio: null,
+            gameoverAudio: null,
+            musicEnabled: true,
+            gameRunning: false,
+            gameOver: false,
+            score: 0,
+            player: {{ x: 100, y: 200, vy: 0, size: 50 }},
+            pipes: [],
+            pipeTimer: 0,
+            lastTime: performance.now(),
+            images: {{ bg: null, player: null, pipe: null }},
+            countdownActive: false,
+            countdownValue: 3
+        }};
 
-// Game settings from Streamlit
-const GAME_SPEED = {game_speed};
-const GRAVITY = {gravity_strength};
-const JUMP_POWER = -{jump_power};
+        // DOM Elements
+        const elements = {{
+            canvas: document.getElementById('gameCanvas'),
+            startScreen: document.getElementById('startScreen'),
+            gameOverScreen: document.getElementById('gameOverScreen'),
+            countdown: document.getElementById('countdown'),
+            score: document.getElementById('score'),
+            finalScore: document.getElementById('finalScore'),
+            musicToggle: document.getElementById('musicToggle'),
+            startBtn: document.getElementById('startBtn'),
+            mainStartBtn: document.getElementById('mainStartBtn'),
+            restartBtn: document.getElementById('restartBtn')
+        }};
 
-let menuAudio = null;
-let ingameAudio = null;
-let musicEnabled = true;
+        const ctx = elements.canvas.getContext('2d');
 
-if (MENU_MUSIC_URL) {{
-  menuAudio = new Audio(MENU_MUSIC_URL);
-  menuAudio.loop = true;
-  menuAudio.volume = 0.4;
-}}
-if (INGAME_MUSIC_URL) {{
-  ingameAudio = new Audio(INGAME_MUSIC_URL);
-  ingameAudio.loop = true;
-  ingameAudio.volume = 0.4;
-}}
+        // Initialize Game
+        function initGame() {{
+            setupEventListeners();
+            loadAssets();
+            setupAudio();
+            resizeCanvas();
+            renderMenu();
+        }}
 
-const menuOverlay = document.getElementById('menuOverlay');
-const menuPlayBtn = document.getElementById('menuPlayBtn');
-const startBtn = document.getElementById('startBtn');
-const musicToggle = document.getElementById('musicToggle');
-const scoreSpan = document.getElementById('score');
+        // Setup Event Listeners
+        function setupEventListeners() {{
+            // Window resize
+            window.addEventListener('resize', resizeCanvas);
 
-// Auto music on page load
-try {{
-  const m = localStorage.getItem('flappy_music_enabled');
-  if (m !== null) musicEnabled = m === '1';
-  musicToggle.innerText = musicEnabled ? '🔊 Music ON' : '🔇 Music OFF';
-  
-  // Auto start music
-  if (musicEnabled && menuAudio) {{
-    setTimeout(() => {{
-      menuAudio.play().catch(e => console.log('Auto-play prevented'));
-    }}, 1000);
-  }}
-}} catch(e){{ console.warn('storage err', e); }}
+            // Music toggle
+            elements.musicToggle.addEventListener('click', toggleMusic);
 
-musicToggle.addEventListener('click', () => {{
-  musicEnabled = !musicEnabled;
-  musicToggle.innerText = musicEnabled ? '🔊 Music ON' : '🔇 Music OFF';
-  try {{ localStorage.setItem('flappy_music_enabled', musicEnabled ? '1' : '0'); }} catch(e){{}}
-  if (!musicEnabled) {{
-    if (menuAudio) menuAudio.pause();
-    if (ingameAudio) ingameAudio.pause();
-  }} else {{
-    if (!gameRunning && menuAudio) menuAudio.play().catch(()=>{{}});
-    if (gameRunning && ingameAudio) ingameAudio.play().catch(()=>{{}});
-  }}
-}});
+            // Start buttons
+            elements.mainStartBtn.addEventListener('click', startGame);
+            elements.startBtn.addEventListener('click', startGame);
+            elements.restartBtn.addEventListener('click', restartGame);
 
-const canvas = document.getElementById('c');
-const ctx = canvas.getContext('2d');
+            // Game controls
+            window.addEventListener('keydown', (e) => {{
+                if (e.code === 'Space' || e.key === 'ArrowUp') flap();
+            }});
+            elements.canvas.addEventListener('mousedown', flap);
+            elements.canvas.addEventListener('touchstart', (e) => {{
+                e.preventDefault();
+                flap();
+            }}, {{passive: false}});
+        }}
 
-function resize(){{ 
-  canvas.width = Math.min(window.innerWidth*0.95, 900); 
-  canvas.height = Math.min(window.innerHeight*0.65, 600); 
-}}
-resize(); 
-window.addEventListener('resize', resize);
+        // Audio Management
+        function setupAudio() {{
+            if (CONFIG.MENU_MUSIC_URL) {{
+                gameState.menuAudio = new Audio(CONFIG.MENU_MUSIC_URL);
+                gameState.menuAudio.loop = true;
+                gameState.menuAudio.volume = 0.4;
+            }}
+            if (CONFIG.INGAME_MUSIC_URL) {{
+                gameState.ingameAudio = new Audio(CONFIG.INGAME_MUSIC_URL);
+                gameState.ingameAudio.loop = true;
+                gameState.ingameAudio.volume = 0.4;
+            }}
+            if (CONFIG.GAMEOVER_MUSIC_URL) {{
+                gameState.gameoverAudio = new Audio(CONFIG.GAMEOVER_MUSIC_URL);
+                gameState.gameoverAudio.volume = 0.4;
+            }}
 
-let images = {{ bg: null, player: null, pipe: null }};
-function loadImage(url){{ return new Promise((res,rej) => {{ let i=new Image(); i.onload = ()=>res(i); i.onerror = rej; i.src = url; }}); }}
+            // Load music preference
+            try {{
+                const saved = localStorage.getItem('flappy_music_enabled');
+                if (saved !== null) gameState.musicEnabled = saved === '1';
+                updateMusicButton();
+            }} catch (e) {{}}
+        }}
 
-let gameRunning = false;
-let gameOver = false;
-let score = 0;
-let player = {{ x: 100, y: 200, vy:0, size:50 }};
-let pipes = [];
-let pipeGap = 180; // Wider gap for easier gameplay
-let pipeTimer = 0;
-let last = performance.now();
+        function toggleMusic() {{
+            gameState.musicEnabled = !gameState.musicEnabled;
+            updateMusicButton();
+            try {{
+                localStorage.setItem('flappy_music_enabled', gameState.musicEnabled ? '1' : '0');
+            }} catch (e) {{}}
 
-async function loadAssets() {{
-  try {{
-    images.bg = BG_URL ? await loadImage(BG_URL) : null;
-    images.player = PLAYER_URL ? await loadImage(PLAYER_URL) : null;
-    images.pipe = PIPE_URL ? await loadImage(PIPE_URL) : null;
-  }} catch(e) {{ console.warn('asset load failed', e); }}
-}}
+            if (!gameState.musicEnabled) {{
+                stopAllAudio();
+            }} else {{
+                playCurrentAudio();
+            }}
+        }}
 
-function reset() {{
-  score = 0;
-  player.y = canvas.height/2;
-  player.vy = 0;
-  pipes = [];
-  gameOver = false;
-  scoreSpan.innerText = score;
-}}
+        function updateMusicButton() {{
+            elements.musicToggle.textContent = gameState.musicEnabled ? '🔊 Music' : '🔇 Music';
+        }}
 
-function spawnPipe() {{
-  const margin = Math.floor(canvas.height*0.15); // More margin
-  const center = Math.floor(Math.random()*(canvas.height-margin*2-pipeGap) + margin + pipeGap/2);
-  pipes.push({{ x: canvas.width + 100, center, scored:false }});
-}}
+        function stopAllAudio() {{
+            if (gameState.menuAudio) gameState.menuAudio.pause();
+            if (gameState.ingameAudio) gameState.ingameAudio.pause();
+            if (gameState.gameoverAudio) gameState.gameoverAudio.pause();
+        }}
 
-function update(dt) {{
-  if (!gameRunning || gameOver) return;
-  pipeTimer += dt;
-  if (pipeTimer > 1800) {{ pipeTimer = 0; spawnPipe(); }} // Slower pipe spawn
-  for (let p of pipes) p.x -= (GAME_SPEED * 0.8) * (dt/16); // Adjustable speed
-  if (pipes.length && pipes[0].x + 120 < 0) pipes.shift();
-  player.vy += GRAVITY * (dt/16);
-  player.y += player.vy * (dt/16);
-  for (let p of pipes) {{
-    const w = Math.floor(canvas.width * 0.08); // Narrower pipes
-    const topH = p.center - (pipeGap/2);
-    const bottomY = p.center + (pipeGap/2);
-    if (!p.scored && p.x + w < player.x) {{ p.scored = true; score++; scoreSpan.innerText = score; }}
-    // Easier collision detection
-    const playerRect = {{ x: player.x, y: player.y, width: player.size, height: player.size }};
-    const topPipe = {{ x: p.x, y: 0, width: w, height: topH }};
-    const bottomPipe = {{ x: p.x, y: bottomY, width: w, height: canvas.height - bottomY }};
-    
-    if (checkCollision(playerRect, topPipe) || checkCollision(playerRect, bottomPipe)) {{
-      gameOver = true;
-    }}
-  }}
-  // Ground collision with buffer
-  if (player.y + player.size > canvas.height - 10) gameOver = true;
-  // Ceiling collision removed for easier gameplay
-  if (player.y < 0) player.y = 0;
-}}
+        function playCurrentAudio() {{
+            if (!gameState.musicEnabled) return;
+            
+            if (gameState.gameOver && gameState.gameoverAudio) {{
+                gameState.gameoverAudio.play().catch(() => {{}});
+            }} else if (gameState.gameRunning && gameState.ingameAudio) {{
+                gameState.ingameAudio.play().catch(() => {{}});
+            }} else if (gameState.menuAudio) {{
+                gameState.menuAudio.play().catch(() => {{}});
+            }}
+        }}
 
-function checkCollision(rect1, rect2) {{
-  return rect1.x < rect2.x + rect2.width &&
-         rect1.x + rect1.width > rect2.x &&
-         rect1.y < rect2.y + rect2.height &&
-         rect1.y + rect1.height > rect2.y;
-}}
+        // Asset Loading
+        function loadImage(url) {{
+            return new Promise((resolve, reject) => {{
+                const img = new Image();
+                img.onload = () => resolve(img);
+                img.onerror = reject;
+                img.src = url;
+            }});
+        }}
 
-function render() {{
-  if (images.bg) {{
-    ctx.drawImage(images.bg, 0, 0, canvas.width, canvas.height);
-  }} else {{
-    // Default gradient background
-    const gradient = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
-    gradient.addColorStop(0, '#1e3c72');
-    gradient.addColorStop(1, '#2a5298');
-    ctx.fillStyle = gradient;
-    ctx.fillRect(0,0,canvas.width,canvas.height);
-  }}
-  
-  for (let p of pipes) {{
-    const w = Math.floor(canvas.width * 0.08);
-    const topH = p.center - (pipeGap/2);
-    if (images.pipe) {{
-      ctx.drawImage(images.pipe, p.x, 0, w, topH);
-      ctx.drawImage(images.pipe, p.x, p.center + (pipeGap/2), w, canvas.height - (p.center + (pipeGap/2)));
-    }} else {{
-      // Default pipe with gradient
-      const pipeGradient = ctx.createLinearGradient(p.x, 0, p.x + w, 0);
-      pipeGradient.addColorStop(0, '#2ecc71');
-      pipeGradient.addColorStop(1, '#27ae60');
-      ctx.fillStyle = pipeGradient;
-      ctx.fillRect(p.x, 0, w, topH);
-      ctx.fillRect(p.x, p.center + (pipeGap/2), w, canvas.height - (p.center + (pipeGap/2)));
-    }}
-  }}
-  
-  if (images.player) {{
-    ctx.drawImage(images.player, player.x, player.y, player.size, player.size);
-  }} else {{
-    // Default player with glow effect
-    ctx.shadowColor = '#f1c40f';
-    ctx.shadowBlur = 15;
-    ctx.fillStyle = '#f1c40f';
-    ctx.fillRect(player.x, player.y, player.size, player.size);
-    ctx.shadowBlur = 0;
-  }}
-}}
+        async function loadAssets() {{
+            try {{
+                if (CONFIG.BG_URL) gameState.images.bg = await loadImage(CONFIG.BG_URL);
+                if (CONFIG.PLAYER_URL) gameState.images.player = await loadImage(CONFIG.PLAYER_URL);
+                if (CONFIG.PIPE_URL) gameState.images.pipe = await loadImage(CONFIG.PIPE_URL);
+            }} catch (error) {{
+                console.warn('Failed to load some assets:', error);
+            }}
+        }}
 
-function loop(t) {{
-  const dt = t - last;
-  last = t;
-  update(dt);
-  render();
-  if (!gameOver) requestAnimationFrame(loop);
-  else {{
-    if (ingameAudio) ingameAudio.pause();
-    try {{
-      const prev = parseInt(localStorage.getItem('flappy_best') || '0');
-      if (score > prev) localStorage.setItem('flappy_best', String(score));
-    }} catch(e){{ console.warn('storage err', e); }}
-    
-    // Game over screen with restart option
-    ctx.fillStyle = 'rgba(0,0,0,0.8)'; 
-    ctx.fillRect(0,0,canvas.width,canvas.height);
-    ctx.fillStyle = '#ff6b6b'; 
-    ctx.font = 'bold 36px Arial'; 
-    ctx.textAlign='center';
-    ctx.fillText('GAME OVER', canvas.width/2, canvas.height/2 - 40);
-    ctx.fillStyle = '#ffd93d'; 
-    ctx.font = '28px Arial';
-    ctx.fillText('Score: ' + score, canvas.width/2, canvas.height/2);
-    ctx.fillStyle = '#4ecdc4'; 
-    ctx.font = '20px Arial';
-    ctx.fillText('Click START to play again', canvas.width/2, canvas.height/2 + 50);
-  }}
-}}
+        // Game Flow
+        function startGame() {{
+            elements.startScreen.style.display = 'none';
+            gameState.gameRunning = true;
+            gameState.gameOver = false;
+            
+            if (gameState.menuAudio) gameState.menuAudio.pause();
+            
+            startCountdown();
+        }}
 
-function flap() {{ 
-  if (!gameRunning || gameOver) return; 
-  player.vy = JUMP_POWER; 
-}}
+        function startCountdown() {{
+            gameState.countdownActive = true;
+            gameState.countdownValue = 3;
+            elements.countdown.style.display = 'block';
+            elements.countdown.textContent = gameState.countdownValue;
 
-// Multiple control options
-window.addEventListener('keydown', (e) => {{ 
-  if (e.code === 'Space' || e.key === 'ArrowUp' || e.key === 'w') flap(); 
-}});
-canvas.addEventListener('mousedown', flap);
-canvas.addEventListener('touchstart', (e) => {{ e.preventDefault(); flap(); }}, {{passive:false}});
+            const countdownInterval = setInterval(() => {{
+                gameState.countdownValue--;
+                elements.countdown.textContent = gameState.countdownValue;
 
-startBtn.addEventListener('click', async () => {{
-  if (!gameRunning) {{
-    gameRunning = true;
-    if (menuAudio) {{ menuAudio.pause(); menuAudio.currentTime = 0; }}
-    if (ingameAudio && musicEnabled) {{
-      try {{ await ingameAudio.play(); }} catch(e){{ console.warn('ingame play blocked', e); }}
-    }}
-    menuOverlay.style.display = 'none';
-    reset();
-    last = performance.now();
-    requestAnimationFrame(loop);
-  }} else {{
-    reset();
-    gameOver = false;
-    if (ingameAudio && musicEnabled) {{ ingameAudio.currentTime = 0; ingameAudio.play().catch(()=>{{}}); }}
-    last = performance.now();
-    requestAnimationFrame(loop);
-  }}
-}});
+                if (gameState.countdownValue <= 0) {{
+                    clearInterval(countdownInterval);
+                    elements.countdown.style.display = 'none';
+                    gameState.countdownActive = false;
+                    resetGame();
+                    gameState.lastTime = performance.now();
+                    if (gameState.musicEnabled && gameState.ingameAudio) {{
+                        gameState.ingameAudio.play().catch(() => {{}});
+                    }}
+                    requestAnimationFrame(gameLoop);
+                }}
+            }}, 1000);
+        }}
 
-menuPlayBtn.addEventListener('click', () => {{
-  if (menuAudio && musicEnabled) {{
-    menuAudio.currentTime = 0;
-    menuAudio.play().catch(()=>{{}});
-  }}
-}});
+        function restartGame() {{
+            elements.gameOverScreen.style.display = 'none';
+            startGame();
+        }}
 
-// Show best score
-try {{
-  const best = parseInt(localStorage.getItem('flappy_best') || '0');
-  if (!isNaN(best) && best > 0) {{
-    const card = document.querySelector('#menuCard');
-    const el = document.createElement('div');
-    el.style.marginTop = '15px';
-    el.style.fontSize = '16px';
-    el.style.color = '#ffd93d';
-    el.style.fontWeight = 'bold';
-    el.innerText = '🏆 Best Score: ' + best;
-    card.appendChild(el);
-  }}
-}} catch(e){{ console.warn('storage err', e); }}
+        function endGame() {{
+            gameState.gameRunning = false;
+            gameState.gameOver = true;
 
-loadAssets().then(() => {{ render(); }}).catch(e => {{ console.warn('assets load', e); render(); }});
+            if (gameState.ingameAudio) gameState.ingameAudio.pause();
+            
+            elements.finalScore.textContent = gameState.score;
+            elements.gameOverScreen.style.display = 'flex';
 
-</script>
+            if (gameState.musicEnabled && gameState.gameoverAudio) {{
+                gameState.gameoverAudio.currentTime = 0;
+                gameState.gameoverAudio.play().catch(() => {{}});
+            }}
+
+            // Save best score
+            try {{
+                const best = parseInt(localStorage.getItem('flappy_best') || '0');
+                if (gameState.score > best) {{
+                    localStorage.setItem('flappy_best', gameState.score.toString());
+                }}
+            }} catch (e) {{}}
+        }}
+
+        // Game Logic
+        function resetGame() {{
+            gameState.score = 0;
+            gameState.player.y = elements.canvas.height / 2;
+            gameState.player.vy = 0;
+            gameState.pipes = [];
+            gameState.pipeTimer = 0;
+            elements.score.textContent = '0';
+        }}
+
+        function spawnPipe() {{
+            const margin = elements.canvas.height * 0.15;
+            const center = Math.random() * (elements.canvas.height - margin * 2 - CONFIG.PIPE_GAP) + margin + CONFIG.PIPE_GAP / 2;
+            gameState.pipes.push({{ x: elements.canvas.width + 100, center, scored: false }});
+        }}
+
+        function update(deltaTime) {{
+            if (!gameState.gameRunning || gameState.gameOver || gameState.countdownActive) return;
+
+            // Spawn pipes
+            gameState.pipeTimer += deltaTime;
+            if (gameState.pipeTimer > 1800) {{
+                gameState.pipeTimer = 0;
+                spawnPipe();
+            }}
+
+            // Update pipes
+            gameState.pipes.forEach(pipe => {{
+                pipe.x -= (CONFIG.GAME_SPEED * 0.8) * (deltaTime / 16);
+            }});
+
+            // Remove off-screen pipes
+            if (gameState.pipes.length > 0 && gameState.pipes[0].x + 120 < 0) {{
+                gameState.pipes.shift();
+            }}
+
+            // Update player
+            gameState.player.vy += CONFIG.GRAVITY * (deltaTime / 16);
+            gameState.player.y += gameState.player.vy * (deltaTime / 16);
+
+            // Check collisions
+            checkCollisions();
+
+            // Check boundaries
+            if (gameState.player.y + gameState.player.size > elements.canvas.height - 10) {{
+                endGame();
+            }}
+            if (gameState.player.y < 0) {{
+                gameState.player.y = 0;
+                gameState.player.vy = 0;
+            }}
+        }}
+
+        function checkCollisions() {{
+            const playerRect = {{
+                x: gameState.player.x,
+                y: gameState.player.y,
+                width: gameState.player.size,
+                height: gameState.player.size
+            }};
+
+            for (const pipe of gameState.pipes) {{
+                const pipeWidth = elements.canvas.width * 0.08;
+                const topHeight = pipe.center - (CONFIG.PIPE_GAP / 2);
+                const bottomY = pipe.center + (CONFIG.PIPE_GAP / 2);
+
+                // Score point
+                if (!pipe.scored && pipe.x + pipeWidth < gameState.player.x) {{
+                    pipe.scored = true;
+                    gameState.score++;
+                    elements.score.textContent = gameState.score;
+                }}
+
+                // Collision detection
+                const topPipe = {{ x: pipe.x, y: 0, width: pipeWidth, height: topHeight }};
+                const bottomPipe = {{ x: pipe.x, y: bottomY, width: pipeWidth, height: elements.canvas.height - bottomY }};
+
+                if (checkRectCollision(playerRect, topPipe) || checkRectCollision(playerRect, bottomPipe)) {{
+                    endGame();
+                    return;
+                }}
+            }}
+        }}
+
+        function checkRectCollision(rect1, rect2) {{
+            return rect1.x < rect2.x + rect2.width &&
+                   rect1.x + rect1.width > rect2.x &&
+                   rect1.y < rect2.y + rect2.height &&
+                   rect1.y + rect1.height > rect2.y;
+        }}
+
+        function flap() {{
+            if (!gameState.gameRunning || gameState.gameOver || gameState.countdownActive) return;
+            gameState.player.vy = CONFIG.JUMP_POWER;
+        }}
+
+        // Rendering
+        function render() {{
+            // Clear canvas
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, 0, elements.canvas.width, elements.canvas.height);
+
+            // Draw background
+            if (gameState.images.bg) {{
+                ctx.drawImage(gameState.images.bg, 0, 0, elements.canvas.width, elements.canvas.height);
+            }} else {{
+                const gradient = ctx.createLinearGradient(0, 0, elements.canvas.width, elements.canvas.height);
+                gradient.addColorStop(0, '#1e3c72');
+                gradient.addColorStop(1, '#2a5298');
+                ctx.fillStyle = gradient;
+                ctx.fillRect(0, 0, elements.canvas.width, elements.canvas.height);
+            }}
+
+            // Draw pipes
+            gameState.pipes.forEach(pipe => {{
+                const pipeWidth = elements.canvas.width * 0.08;
+                const topHeight = pipe.center - (CONFIG.PIPE_GAP / 2);
+
+                if (gameState.images.pipe) {{
+                    ctx.drawImage(gameState.images.pipe, pipe.x, 0, pipeWidth, topHeight);
+                    ctx.drawImage(gameState.images.pipe, pipe.x, pipe.center + (CONFIG.PIPE_GAP / 2), pipeWidth, elements.canvas.height - (pipe.center + (CONFIG.PIPE_GAP / 2)));
+                }} else {{
+                    const pipeGradient = ctx.createLinearGradient(pipe.x, 0, pipe.x + pipeWidth, 0);
+                    pipeGradient.addColorStop(0, '#2ecc71');
+                    pipeGradient.addColorStop(1, '#27ae60');
+                    ctx.fillStyle = pipeGradient;
+                    ctx.fillRect(pipe.x, 0, pipeWidth, topHeight);
+                    ctx.fillRect(pipe.x, pipe.center + (CONFIG.PIPE_GAP / 2), pipeWidth, elements.canvas.height - (pipe.center + (CONFIG.PIPE_GAP / 2)));
+                }}
+            }});
+
+            // Draw player
+            if (gameState.images.player) {{
+                ctx.drawImage(gameState.images.player, gameState.player.x, gameState.player.y, gameState.player.size, gameState.player.size);
+            }} else {{
+                ctx.fillStyle = '#f1c40f';
+                ctx.fillRect(gameState.player.x, gameState.player.y, gameState.player.size, gameState.player.size);
+            }}
+        }}
+
+        function renderMenu() {{
+            render();
+        }}
+
+        // Game Loop
+        function gameLoop(currentTime) {{
+            const deltaTime = currentTime - gameState.lastTime;
+            gameState.lastTime = currentTime;
+
+            update(deltaTime);
+            render();
+
+            if (gameState.gameRunning && !gameState.gameOver) {{
+                requestAnimationFrame(gameLoop);
+            }}
+        }}
+
+        // Utility Functions
+        function resizeCanvas() {{
+            elements.canvas.width = Math.min(window.innerWidth * 0.95, 900);
+            elements.canvas.height = Math.min(window.innerHeight * 0.7, 600);
+            if (!gameState.gameRunning) {{
+                renderMenu();
+            }}
+        }}
+
+        // Start the game when page loads
+        window.addEventListener('load', initGame);
+    </script>
 </body>
 </html>
-"""
+'''
 
-# Render game
-st.components.v1.html(game_html, height=700, scrolling=False)
+# Render the game
+st.components.v1.html(game_html, height=800, scrolling=False)
 
-# Instructions
-st.markdown("""
-## 🎯 Easy Game Features:
-
-### ✨ **Auto Easy Mode:**
-- **Wider gaps** between obstacles
-- **Slower game speed** by default  
-- **Multiple controls**: Space, Arrow Up, Click, or Touch
-- **No ceiling death** - bounce safely at top
-
-### 🎨 **Customization:**
-1. **Upload images** from sidebar - game automatically updates!
-2. **Choose your music** - menu and game music
-3. **Adjust settings**: Game speed, gravity, jump power
-
-### 🎮 **How to Play:**
-- Press **START GAME** to begin
-- Use **SPACE, CLICK, or TOUCH** to make bird jump
-- Avoid obstacles and score points!
-- Music plays automatically
-
-### 💡 **Pro Tip:** 
-Set **low gravity** and **high jump power** for super easy gameplay!
-""")
-
-# Add some fun emojis
+# Features Section
 st.markdown("---")
+st.markdown("## 🎯 Premium Features")
+
 col1, col2, col3 = st.columns(3)
+
 with col1:
-    st.markdown("**🎵 Your Music**")
+    st.markdown("""
+    ### 🎨 Visual Excellence
+    - **High-quality graphics**
+    - **Smooth animations** 
+    - **Character pop-up effects**
+    - **Professional UI/UX**
+    """)
+
 with col2:
-    st.markdown("**🖼️ Your Images**")  
+    st.markdown("""
+    ### 🎵 Audio Mastery
+    - **Menu music system**
+    - **In-game soundtrack**
+    - **Game-over music**
+    - **Audio controls**
+    """)
+
 with col3:
-    st.markdown("**⚡ Your Settings**")
+    st.markdown("""
+    ### ⚡ Game Enhancements
+    - **3-second countdown**
+    - **Customizable difficulty**
+    - **Score tracking**
+    - **Responsive design**
+    """)
+
+st.markdown("---")
+st.markdown("### 🎮 How to Play")
+st.markdown("""
+1. **Customize** your game using the sidebar options
+2. **Click START GAME** to begin with a 3-second countdown
+3. **Press SPACE, CLICK, or ARROW UP** to make the bird jump
+4. **Avoid obstacles** and score points
+5. **Enjoy** your customized gaming experience!
+""")
