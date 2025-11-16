@@ -65,6 +65,10 @@ PIPE_URL = fileobj_to_data_url(up_pipe, REPO_PIPE) or ""
 MENU_MUSIC_URL = fileobj_to_data_url(up_menu_music, REPO_MENU_MUSIC)
 INGAME_MUSIC_URL = fileobj_to_data_url(up_ingame_music, REPO_INGAME_MUSIC)
 
+# Auto-play music on app load using session state
+if 'auto_play_attempted' not in st.session_state:
+    st.session_state.auto_play_attempted = False
+
 # --------- Generate embedded HTML + JS (escaped braces) ---------
 game_html = f"""
 <!doctype html>
@@ -81,17 +85,19 @@ game_html = f"""
   #menuCard {{ background: rgba(0,0,0,0.6); padding:20px 22px; border-radius:12px; text-align:center; pointer-events:all; }}
   #menuCard button {{ margin-top:12px; padding:10px 16px; font-weight:700; border-radius:8px; border:none; background:#20bf6b; color:#fff; }}
   #scoreText {{ position:absolute; top:14px; left:50%; transform:translateX(-50%); z-index:999; font-size:28px; font-weight:700; }}
+  #autoPlayMsg {{ position:absolute; top:60px; left:50%; transform:translateX(-50%); z-index:999; font-size:14px; color:#ffdd59; background:rgba(0,0,0,0.7); padding:4px 8px; border-radius:4px; }}
 </style>
 </head>
 <body>
 <div id="canvasWrap">
   <div id="scoreText">Score: <span id="score">0</span></div>
+  <div id="autoPlayMsg" style="display:none;">Auto-playing menu music...</div>
   <button id="musicToggle">Music ON</button>
   <button id="startBtn">START</button>
 
   <div id="menuOverlay">
     <div id="menuCard">
-      <h3>Welcome — Use PLAY to allow menu music</h3>
+      <h3>Welcome — Menu music auto-plays</h3>
       <p>Upload your own background/player/obstacle and menu/in-game music from the sidebar.</p>
       <button id="menuPlayBtn">PLAY</button>
     </div>
@@ -110,6 +116,7 @@ const INGAME_MUSIC_URL = {('"' + INGAME_MUSIC_URL + '"') if INGAME_MUSIC_URL els
 let menuAudio = null;
 let ingameAudio = null;
 let musicEnabled = true;
+let autoPlayAttempted = false;
 
 if (MENU_MUSIC_URL) {{
   menuAudio = new Audio(MENU_MUSIC_URL);
@@ -127,12 +134,46 @@ const menuPlayBtn = document.getElementById('menuPlayBtn');
 const startBtn = document.getElementById('startBtn');
 const musicToggle = document.getElementById('musicToggle');
 const scoreSpan = document.getElementById('score');
+const autoPlayMsg = document.getElementById('autoPlayMsg');
 
 try {{
   const m = localStorage.getItem('flappy_music_enabled');
   if (m !== null) musicEnabled = m === '1';
   musicToggle.innerText = musicEnabled ? 'Music ON' : 'Music OFF';
 }} catch(e){{ console.warn('storage err', e); }}
+
+// Auto-play music on page load with user gesture simulation
+function attemptAutoPlay() {{
+  if (autoPlayAttempted) return;
+  autoPlayAttempted = true;
+  
+  if (menuAudio && musicEnabled) {{
+    // Show auto-play message
+    autoPlayMsg.style.display = 'block';
+    setTimeout(() => {{ autoPlayMsg.style.display = 'none'; }}, 3000);
+    
+    // Create and trigger a synthetic user gesture
+    const playPromise = menuAudio.play();
+    
+    if (playPromise !== undefined) {{
+      playPromise.then(() => {{
+        console.log('Menu music auto-played successfully');
+      }}).catch(error => {{
+        console.log('Auto-play prevented by browser:', error);
+        // If auto-play fails, show instruction to user
+        const card = document.querySelector('#menuCard h3');
+        if (card) {{
+          card.innerText = 'Welcome — Click PLAY for menu music';
+        }}
+      }});
+    }}
+  }}
+}}
+
+// Multiple strategies to trigger auto-play
+window.addEventListener('load', attemptAutoPlay);
+document.addEventListener('DOMContentLoaded', attemptAutoPlay);
+setTimeout(attemptAutoPlay, 500);
 
 musicToggle.addEventListener('click', () => {{
   musicEnabled = !musicEnabled;
@@ -142,8 +183,12 @@ musicToggle.addEventListener('click', () => {{
     if (menuAudio) menuAudio.pause();
     if (ingameAudio) ingameAudio.pause();
   }} else {{
-    if (!gameRunning && menuAudio) menuAudio.play().catch(()=>{{}});
-    if (gameRunning && ingameAudio) ingameAudio.play().catch(()=>{{}});
+    if (!gameRunning && menuAudio) {{
+      menuAudio.play().catch(()=>{{}});
+    }}
+    if (gameRunning && ingameAudio) {{
+      ingameAudio.play().catch(()=>{{}});
+    }}
   }}
 }});
 
@@ -314,9 +359,10 @@ loadAssets().then(() => {{ render(); }}).catch(e => {{ console.warn('assets load
 st.components.v1.html(game_html, height=760, scrolling=False)
 
 st.markdown("""
-**Instructions (simple):**
-1. Use the **sidebar** to upload your background/player/obstacle images and menu/in-game music.  
-2. On the page: first press **PLAY** (menu) to allow menu music (browser requires a gesture).  
-3. Then press **START** to play — menu music will stop and in-game music will start.  
-4. If you don't upload files, the app will try to use repo files with default names (change filenames at top of this script if your repo uses different names).
+**Improved Instructions:**
+1. **Menu music now auto-plays** when the app loads (if browser allows)
+2. Use the **sidebar** to upload your background/player/obstacle images and menu/in-game music.  
+3. If auto-play doesn't work due to browser restrictions, press **PLAY** button for menu music
+4. Then press **START** to play — menu music will stop and in-game music will start.  
+5. If you don't upload files, the app will try to use repo files with default names.
 """)
