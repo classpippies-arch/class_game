@@ -148,10 +148,20 @@ game_html = f"""
 
   // small WebAudio SFX
   const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  function beep(freq,d=0.05){ try{{ const o=audioCtx.createOscillator(); const g=audioCtx.createGain(); o.frequency.value=freq; o.connect(g); g.connect(audioCtx.destination); g.gain.setValueAtTime(0.12,audioCtx.currentTime); o.start(); o.stop(audioCtx.currentTime+d); }}catch(e){{}} }
-  function flapSnd(){ beep(880,0.05); }
-  function scoreSnd(){ beep(1200,0.06); setTimeout(()=>beep(1500,0.04),60); }
-  function hitSnd(){ beep(180,0.12); }
+js_code = """
+function beep(freq, d) {
+  try {
+    const o = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    o.frequency.value = freq;
+    o.connect(g);
+    g.connect(audioCtx.destination);
+    g.gain.setValueAtTime(0.12, audioCtx.currentTime);
+    o.start();
+    o.stop(audioCtx.currentTime + d);
+  } catch(e) {}
+}
+"""
 
   // try to autoplay homeAudio (may be blocked)
   let homeAudioAllowed = false;
