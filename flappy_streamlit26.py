@@ -3,51 +3,69 @@ import streamlit as st
 import base64
 import os
 
-st.set_page_config(page_title="Flappy Bird Game", layout="wide")
-st.title("Flappy Bird – Streamlit Edition")
-st.write("Tap/Click/Space to jump. Menu music and in-game music handled separately. Mobile + PC friendly.")
+st.set_page_config(page_title="Flappy Bird (Upload Assets)", layout="wide")
+st.title("Flappy Bird — Upload your images & music")
+st.write("Upload background/player/obstacle images and menu/in-game music using the UI below. Then use PLAY (menu) and START (game).")
 
-# -------------------------
-# Configure these filenames to match your repo exactly (case-sensitive)
-# -------------------------
-MENU_MUSIC_FILE = "Home Screen Music (Only on Menu Screen).mp3"
-INGAME_MUSIC_FILE = "ingame_music_1.mp3"  # or ingame_music_2.mp3, etc.
+# --------- Left side: Uploaders ---------
+with st.sidebar:
+    st.header("Upload your assets (optional)")
+    up_bg = st.file_uploader("Background image (png/jpg)", type=["png","jpg","jpeg"], key="bg")
+    up_player = st.file_uploader("Player image (png/jpg)", type=["png","jpg","jpeg"], key="player")
+    up_pipe = st.file_uploader("Obstacle image (png/jpg)", type=["png","jpg","jpeg"], key="pipe")
+    st.markdown("---")
+    up_menu_music = st.file_uploader("Menu music (mp3/ogg/wav)", type=["mp3","ogg","wav"], key="menu_music")
+    up_ingame_music = st.file_uploader("In-game music (mp3/ogg/wav)", type=["mp3","ogg","wav"], key="ingame_music")
+    st.markdown("---")
+    st.info("If you don't upload, app will try to use files present in repo root (player_character.png, obstacle_enemy.png, background_image.png, etc.)")
 
-PLAYER_FILE = "player_character.png"
-PIPE_FILE = "obstacle_enemy.png"
-BG_FILE = "background_image.png"
-
-# -------------------------
-# Helper: convert local file to data URL or None
-# -------------------------
-def file_to_data_url_if_exists(filepath):
-    if not os.path.exists(filepath):
-        return None
-    b = open(filepath, "rb").read()
-    ext = filepath.lower().split(".")[-1]
-    if ext in ("png", "svg"):
+# --------- Helper: convert uploaded file or repo file to data URL ---------
+def fileobj_to_data_url(fileobj, default_path=None):
+    # if user uploaded fileobj, use it
+    if fileobj is not None:
+        raw = fileobj.read()
+        name = fileobj.name.lower()
         mime = "image/png"
-    elif ext in ("jpg", "jpeg"):
-        mime = "image/jpeg"
-    elif ext == "mp3":
-        mime = "audio/mpeg"
-    elif ext == "ogg":
-        mime = "audio/ogg"
-    elif ext == "wav":
-        mime = "audio/wav"
-    else:
-        mime = "application/octet-stream"
-    return f"data:{mime};base64," + base64.b64encode(b).decode()
+        if name.endswith(".jpg") or name.endswith(".jpeg"):
+            mime = "image/jpeg"
+        elif name.endswith(".mp3"):
+            mime = "audio/mpeg"
+        elif name.endswith(".ogg"):
+            mime = "audio/ogg"
+        elif name.endswith(".wav"):
+            mime = "audio/wav"
+        return f"data:{mime};base64," + base64.b64encode(raw).decode()
+    # else try repo file fallback
+    if default_path and os.path.exists(default_path):
+        with open(default_path, "rb") as f:
+            raw = f.read()
+        ext = default_path.lower().split(".")[-1]
+        mime = "image/png"
+        if ext in ("jpg", "jpeg"):
+            mime = "image/jpeg"
+        elif ext == "mp3":
+            mime = "audio/mpeg"
+        elif ext == "ogg":
+            mime = "audio/ogg"
+        elif ext == "wav":
+            mime = "audio/wav"
+        return f"data:{mime};base64," + base64.b64encode(raw).decode()
+    return None
 
-PLAYER_URL = file_to_data_url_if_exists(PLAYER_FILE) or ""
-PIPE_URL = file_to_data_url_if_exists(PIPE_FILE) or ""
-BG_URL = file_to_data_url_if_exists(BG_FILE) or ""
-MENU_MUSIC_URL = file_to_data_url_if_exists(MENU_MUSIC_FILE)
-INGAME_MUSIC_URL = file_to_data_url_if_exists(INGAME_MUSIC_FILE)
+# repo fallback names (change if your repo uses different names)
+REPO_BG = "background_image.png"
+REPO_PLAYER = "player_character.png"
+REPO_PIPE = "obstacle_enemy.png"
+REPO_MENU_MUSIC = "Home Screen Music (Only on Menu Screen).mp3"
+REPO_INGAME_MUSIC = "ingame_music_1.mp3"
 
-# -------------------------
-# Embedded HTML/JS game (use double braces {{ }} to escape for Python f-string)
-# -------------------------
+BG_URL = fileobj_to_data_url(up_bg, REPO_BG) or ""
+PLAYER_URL = fileobj_to_data_url(up_player, REPO_PLAYER) or ""
+PIPE_URL = fileobj_to_data_url(up_pipe, REPO_PIPE) or ""
+MENU_MUSIC_URL = fileobj_to_data_url(up_menu_music, REPO_MENU_MUSIC)
+INGAME_MUSIC_URL = fileobj_to_data_url(up_ingame_music, REPO_INGAME_MUSIC)
+
+# --------- Generate embedded HTML + JS (escaped braces) ---------
 game_html = f"""
 <!doctype html>
 <html>
@@ -60,7 +78,7 @@ game_html = f"""
   #startBtn {{ position:absolute; top:12px; right:12px; z-index:999; background:#ff4757; color:#fff; border:none; padding:10px 14px; border-radius:10px; font-weight:700; }}
   #musicToggle {{ position:absolute; top:12px; left:12px; z-index:999; background:#333; color:#fff; border:none; padding:8px 10px; border-radius:8px; }}
   #menuOverlay {{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; z-index:500; pointer-events:none; }}
-  #menuCard {{ background: rgba(0,0,0,0.6); padding:24px 28px; border-radius:12px; text-align:center; pointer-events:all; }}
+  #menuCard {{ background: rgba(0,0,0,0.6); padding:20px 22px; border-radius:12px; text-align:center; pointer-events:all; }}
   #menuCard button {{ margin-top:12px; padding:10px 16px; font-weight:700; border-radius:8px; border:none; background:#20bf6b; color:#fff; }}
   #scoreText {{ position:absolute; top:14px; left:50%; transform:translateX(-50%); z-index:999; font-size:28px; font-weight:700; }}
 </style>
@@ -73,8 +91,8 @@ game_html = f"""
 
   <div id="menuOverlay">
     <div id="menuCard">
-      <h2>Welcome — Flappy Streamlit</h2>
-      <p>Menu music will play here. Press PLAY to allow audio, then START to begin the game.</p>
+      <h3>Welcome — Use PLAY to allow menu music</h3>
+      <p>Upload your own background/player/obstacle and menu/in-game music from the sidebar.</p>
       <button id="menuPlayBtn">PLAY</button>
     </div>
   </div>
@@ -89,12 +107,10 @@ const BG_URL = "{BG_URL}";
 const MENU_MUSIC_URL = {('"' + MENU_MUSIC_URL + '"') if MENU_MUSIC_URL else 'null'};
 const INGAME_MUSIC_URL = {('"' + INGAME_MUSIC_URL + '"') if INGAME_MUSIC_URL else 'null'};
 
-// Audio elements
 let menuAudio = null;
 let ingameAudio = null;
 let musicEnabled = true;
 
-// create audio if present
 if (MENU_MUSIC_URL) {{
   menuAudio = new Audio(MENU_MUSIC_URL);
   menuAudio.loop = true;
@@ -106,21 +122,18 @@ if (INGAME_MUSIC_URL) {{
   ingameAudio.volume = 0.5;
 }}
 
-// references to DOM
 const menuOverlay = document.getElementById('menuOverlay');
 const menuPlayBtn = document.getElementById('menuPlayBtn');
 const startBtn = document.getElementById('startBtn');
 const musicToggle = document.getElementById('musicToggle');
 const scoreSpan = document.getElementById('score');
 
-// persist music toggle in localStorage
 try {{
   const m = localStorage.getItem('flappy_music_enabled');
   if (m !== null) musicEnabled = m === '1';
   musicToggle.innerText = musicEnabled ? 'Music ON' : 'Music OFF';
 }} catch(e){{ console.warn('storage err', e); }}
 
-// toggle music on/off
 musicToggle.addEventListener('click', () => {{
   musicEnabled = !musicEnabled;
   musicToggle.innerText = musicEnabled ? 'Music ON' : 'Music OFF';
@@ -134,7 +147,6 @@ musicToggle.addEventListener('click', () => {{
   }}
 }});
 
-// canvas & engine
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
 
@@ -155,7 +167,6 @@ let pipeGap = 160;
 let pipeTimer = 0;
 let last = performance.now();
 
-// load assets
 async function loadAssets() {{
   try {{
     images.bg = BG_URL ? await loadImage(BG_URL) : null;
@@ -232,7 +243,6 @@ function loop(t) {{
   if (!gameOver) requestAnimationFrame(loop);
   else {{
     if (ingameAudio) ingameAudio.pause();
-    // save best score
     try {{
       const prev = parseInt(localStorage.getItem('flappy_best') || '0');
       if (score > prev) localStorage.setItem('flappy_best', String(score));
@@ -243,13 +253,11 @@ function loop(t) {{
   }}
 }}
 
-// controls
 function flap() {{ if (!gameRunning || gameOver) return; player.vy = jump; }}
 window.addEventListener('keydown', (e) => {{ if (e.code === 'Space') flap(); }});
 canvas.addEventListener('mousedown', (e) => {{ if (!gameRunning) return; flap(); }});
 canvas.addEventListener('touchstart', (e) => {{ e.preventDefault(); if (!gameRunning) return; flap(); }}, {{passive:false}});
 
-// Start button behavior
 startBtn.addEventListener('click', async () => {{
   if (!gameRunning) {{
     gameRunning = true;
@@ -262,7 +270,6 @@ startBtn.addEventListener('click', async () => {{
     last = performance.now();
     requestAnimationFrame(loop);
   }} else {{
-    // restart
     reset();
     gameOver = false;
     if (ingameAudio && musicEnabled) {{ ingameAudio.currentTime = 0; ingameAudio.play().catch(()=>{{}}); }}
@@ -271,7 +278,6 @@ startBtn.addEventListener('click', async () => {{
   }}
 }});
 
-// Menu play button (gesture to allow menu music)
 menuPlayBtn.addEventListener('click', () => {{
   if (menuAudio && musicEnabled) {{
     menuAudio.currentTime = 0;
@@ -279,17 +285,14 @@ menuPlayBtn.addEventListener('click', () => {{
   }}
 }});
 
-// on page hide: pause audios
 window.addEventListener('pagehide', () => {{
   if (menuAudio) menuAudio.pause();
   if (ingameAudio) ingameAudio.pause();
 }});
 
-// show best score from localStorage on load (if any)
 try {{
   const best = parseInt(localStorage.getItem('flappy_best') || '0');
   if (!isNaN(best) && best > 0) {{
-    // show small overlay text in menu card
     const card = document.querySelector('#menuCard');
     const el = document.createElement('div');
     el.style.marginTop = '8px';
@@ -300,21 +303,20 @@ try {{
   }}
 }} catch(e){{ console.warn('storage err', e); }}
 
-loadAssets().then(() => {{
-  render();
-}}).catch(e => {{ console.warn('assets load', e); render(); }});
+loadAssets().then(() => {{ render(); }}).catch(e => {{ console.warn('assets load', e); render(); }});
 
 </script>
 </body>
 </html>
 """
 
-# Render the HTML game component
+# Render game
 st.components.v1.html(game_html, height=760, scrolling=False)
 
 st.markdown("""
-**Notes (simple):**
-- Click **PLAY** on the menu to allow menu music to start (browser gesture required).  
-- Then press **START** to begin playing — menu music will stop and in-game music will start.  
-- Best score is saved in your browser localStorage.
+**Instructions (simple):**
+1. Use the **sidebar** to upload your background/player/obstacle images and menu/in-game music.  
+2. On the page: first press **PLAY** (menu) to allow menu music (browser requires a gesture).  
+3. Then press **START** to play — menu music will stop and in-game music will start.  
+4. If you don't upload files, the app will try to use repo files with default names (change filenames at top of this script if your repo uses different names).
 """)
