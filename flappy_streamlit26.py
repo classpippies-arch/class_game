@@ -1,421 +1,853 @@
-# flappy_streamlit26_fixed.py
-"""
-Fixed single-file Streamlit Flappy app.
-- No f-strings around HTML/JS to avoid { } parsing issues.
-- JS/HTML placed in a raw template with placeholders %%NAME%% replaced safely.
-- Supports uploads for images & audio, fallback to repo files if present.
-- Mobile-friendly canvas, countdown, music switching (menu -> in-game -> gameover).
-"""
-
+# flappy_streamlit26.py
 import streamlit as st
-from streamlit.components.v1 import html
-from pathlib import Path
-import base64, json, os, time
+import base64
+import os
 
-st.set_page_config(page_title="Premium Flappy Bird (Fixed)", layout="wide", page_icon="🐦")
+st.set_page_config(page_title="Premium Flappy Bird", layout="wide", page_icon="🐦")
+
+# Custom CSS for premium look
 st.markdown("""
 <style>
-/* minimal page spacing so the embedded html sits nicely */
-.block-container{ padding-top: 8px; padding-bottom: 8px; }
+    .main-header {
+        font-size: 3rem;
+        font-weight: 800;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        text-align: center;
+        margin-bottom: 1rem;
+    }
+    .sub-header {
+        text-align: center;
+        color: #666;
+        margin-bottom: 2rem;
+        font-size: 1.2rem;
+    }
+    .sidebar .sidebar-content {
+        background: linear-gradient(180deg, #f8f9fa 0%, #e9ecef 100%);
+    }
+    .upload-section {
+        background: white;
+        padding: 1.5rem;
+        border-radius: 15px;
+        margin: 1rem 0;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        border: 1px solid #e0e0e0;
+    }
+    .stButton button {
+        width: 100%;
+        border-radius: 10px;
+        font-weight: 600;
+        padding: 0.75rem;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border: none;
+        transition: all 0.3s ease;
+    }
+    .stButton button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+    }
 </style>
 """, unsafe_allow_html=True)
 
-# --------- UI / Premium sidebar (keeps your original inputs) ----------
-st.markdown('<div style="text-align:center"><h1>🎮 Premium Flappy Bird</h1><p style="color:gray">Customize visuals & audio — safe JS injection</p></div>', unsafe_allow_html=True)
+st.markdown('<div class="main-header">🎮 Premium Flappy Bird</div>', unsafe_allow_html=True)
+st.markdown('<div class="sub-header">Customize your gaming experience with stunning visuals and audio</div>', unsafe_allow_html=True)
 
+# --------- Premium Sidebar Design ---------
 with st.sidebar:
-    st.markdown("### 🎨 Visual Assets")
-    up_bg = st.file_uploader("🌅 Background (png/jpg)", type=["png","jpg","jpeg"], key="bg")
-    up_player = st.file_uploader("🐦 Player sprite (png/jpg)", type=["png","jpg","jpeg"], key="player")
-    up_pipe = st.file_uploader("🛑 Pipe/Obstacle sprite (png/jpg)", type=["png","jpg","jpeg"], key="pipe")
-    up_bag = st.file_uploader("💼 Bag / accessory (png/jpg) optional", type=["png","jpg","jpeg"], key="bag")
+    st.markdown("### 🎨 Game Studio")
+    
+    with st.container():
+        st.markdown("#### 🖼️ Visual Assets")
+        with st.expander("Upload Images", expanded=True):
+            up_bg = st.file_uploader("🌅 Background", type=["png","jpg","jpeg"], key="bg")
+            up_player = st.file_uploader("🐦 Player Character", type=["png","jpg","jpeg"], key="player")
+            up_pipe = st.file_uploader("🚧 Obstacles", type=["png","jpg","jpeg"], key="pipe")
+            up_bag = st.file_uploader("💼 Character's Bag", type=["png","jpg","jpeg"], key="bag")
 
-    st.markdown("### 🎵 Audio (Menu / In-game / Gameover)")
-    up_menu_music = st.file_uploader("🏠 Menu Music (mp3/ogg/wav)", type=["mp3","ogg","wav"], key="menu_music")
-    up_ingame_music = st.file_uploader("🎮 In-Game Music (mp3/ogg/wav)", type=["mp3","ogg","wav"], key="ingame_music")
-    up_gameover_music = st.file_uploader("💀 Game Over Music (mp3/ogg/wav)", type=["mp3","ogg","wav"], key="gameover_music")
+    with st.container():
+        st.markdown("#### 🎵 Audio Library")
+        with st.expander("Music Settings", expanded=True):
+            up_menu_music = st.file_uploader("🏠 Menu Music", type=["mp3","ogg","wav"], key="menu_music")
+            up_ingame_music = st.file_uploader("🎮 Game Music", type=["mp3","ogg","wav"], key="ingame_music")
+            up_gameover_music = st.file_uploader("💀 Game Over Music", type=["mp3","ogg","wav"], key="gameover_music")
 
-    st.markdown("### 🔊 Sound Effects")
-    up_start_effect = st.file_uploader("🚀 Start Effect", type=["mp3","ogg","wav"], key="start_eff")
-    up_countdown_effect = st.file_uploader("⏱ Countdown Effect", type=["mp3","ogg","wav"], key="count_eff")
-    up_jump_effect = st.file_uploader("🦅 Jump Effect", type=["mp3","ogg","wav"], key="jump_eff")
-    up_score_effect = st.file_uploader("⭐ Score Effect", type=["mp3","ogg","wav"], key="score_eff")
-    up_highscore_effect = st.file_uploader("🏆 High Score Effect", type=["mp3","ogg","wav"], key="hscore_eff")
-    up_elim_effect = st.file_uploader("💥 Elimination Effect", type=["mp3","ogg","wav"], key="elim_eff")
-
-    st.markdown("### ⚙️ Game Settings")
-    col1, col2 = st.columns(2)
-    with col1:
-        game_speed = st.slider("Speed", 1, 10, 3)
-        gravity_strength = st.slider("Gravity (0.1-1.0)", 0.1, 1.0, 0.45, step=0.05)
-    with col2:
-        jump_power = st.slider("Jump Power", 5, 20, 12)
-        pipe_gap = st.slider("Pipe Gap", 120, 240, 160)
+    with st.container():
+        st.markdown("#### ⚙️ Game Settings")
+        with st.expander("Difficulty & Controls", expanded=True):
+            col1, col2 = st.columns(2)
+            with col1:
+                game_speed = st.slider("Speed", 1, 10, 3)
+                gravity_strength = st.slider("Gravity", 0.1, 1.0, 0.5)
+            with col2:
+                jump_power = st.slider("Jump Power", 5, 20, 12)
+                pipe_gap = st.slider("Pipe Gap", 120, 250, 180)
 
     st.markdown("---")
-    st.write("Home music will try to autoplay on menu (browser may block). Use 'Play Home Music' if silent.")
-    play_home_button = st.button("Play Home Music (unlock audio)")
+    st.success("🎯 **Pro Tip**: Upload high-quality assets for the best gaming experience!")
 
-# --------- helper: convert uploaded file or repo file to data URL ----------
-def fileobj_to_data_url(fileobj, fallback_path=None):
-    """Return data URL for uploaded fileobj or fallback_path if provided and exists."""
-    try:
-        if fileobj is not None:
-            raw = fileobj.read()
-            name = getattr(fileobj, "name", "").lower()
-            if name.endswith(".png"):
-                mime = "image/png"
-            elif name.endswith(".jpg") or name.endswith(".jpeg"):
-                mime = "image/jpeg"
-            elif name.endswith(".mp3"):
-                mime = "audio/mpeg"
-            elif name.endswith(".ogg"):
-                mime = "audio/ogg"
-            elif name.endswith(".wav"):
-                mime = "audio/wav"
-            else:
-                mime = "application/octet-stream"
-            return f"data:{mime};base64," + base64.b64encode(raw).decode("ascii")
-    except Exception:
-        pass
+# --------- File Processing ---------
+def fileobj_to_data_url(fileobj, default_path=None):
+    if fileobj is not None:
+        raw = fileobj.read()
+        name = fileobj.name.lower()
+        mime = "image/png"
+        if name.endswith(".jpg") or name.endswith(".jpeg"):
+            mime = "image/jpeg"
+        elif name.endswith(".mp3"):
+            mime = "audio/mpeg"
+        elif name.endswith(".ogg"):
+            mime = "audio/ogg"
+        elif name.endswith(".wav"):
+            mime = "audio/wav"
+        return f"data:{mime};base64," + base64.b64encode(raw).decode()
+    
+    if default_path and os.path.exists(default_path):
+        with open(default_path, "rb") as f:
+            raw = f.read()
+        ext = default_path.lower().split(".")[-1]
+        mime = "image/png"
+        if ext in ("jpg", "jpeg"):
+            mime = "image/jpeg"
+        elif ext == "mp3":
+            mime = "audio/mpeg"
+        elif ext == "ogg":
+            mime = "audio/ogg"
+        elif ext == "wav":
+            mime = "audio/wav"
+        return f"data:{mime};base64," + base64.b64encode(raw).decode()
+    return None
 
-    if fallback_path:
-        try:
-            p = Path(fallback_path)
-            if p.exists():
-                raw = p.read_bytes()
-                ext = p.suffix.lower().lstrip(".")
-                mime = "application/octet-stream"
-                if ext == "png": mime = "image/png"
-                elif ext in ("jpg","jpeg"): mime = "image/jpeg"
-                elif ext == "mp3": mime = "audio/mpeg"
-                elif ext == "ogg": mime = "audio/ogg"
-                elif ext == "wav": mime = "audio/wav"
-                return f"data:{mime};base64," + base64.b64encode(raw).decode("ascii")
-        except Exception:
-            pass
-    return ""
+# File mappings
+REPO_BG = "background_image.png"
+REPO_PLAYER = "player_character.png"
+REPO_PIPE = "obstacle_enemy.png"
+REPO_BAG = "player_character.png"  # Fallback to player image
+REPO_MENU_MUSIC = "Home Screen Music (Only on Menu Screen).mp3"
+REPO_INGAME_MUSIC = "ingame_music_1.mp3"
+REPO_GAMEOVER_MUSIC = "ingame_music_2.mp3"
 
-# --------- fallback repo filenames (if you have files committed to repo) ----------
-# update these names if you committed specific files to the repository
-REPO_BG = "Screenshot 2025-11-16 131426.png"
-REPO_PLAYER = "game ke andar Jis chij Se Bachana hai.jpg"
-REPO_PIPE = "game_pipe.png"   # optional repo file name
-REPO_BAG = "player_bag.png"
-
-REPO_MENU_MUSIC = "audioblocks-mind-game-or-quiz-tension-back.mp3"
-REPO_INGAME_MUSIC = "miaw-miaw-miaw-song-sad-lyrics-video-visual_XBvfuPbJ.mp3"
-REPO_GAMEOVER_MUSIC = "doraemon-title-song-in-tamil_L76vcUzg.mp3"
-
-# --------- get data URLs for assets (uploaded or repo fallback) ----------
+# Process files
 BG_URL = fileobj_to_data_url(up_bg, REPO_BG) or ""
 PLAYER_URL = fileobj_to_data_url(up_player, REPO_PLAYER) or ""
 PIPE_URL = fileobj_to_data_url(up_pipe, REPO_PIPE) or ""
 BAG_URL = fileobj_to_data_url(up_bag, REPO_BAG) or ""
+MENU_MUSIC_URL = fileobj_to_data_url(up_menu_music, REPO_MENU_MUSIC)
+INGAME_MUSIC_URL = fileobj_to_data_url(up_ingame_music, REPO_INGAME_MUSIC)
+GAMEOVER_MUSIC_URL = fileobj_to_data_url(up_gameover_music, REPO_GAMEOVER_MUSIC)
 
-MENU_MUSIC_URL = fileobj_to_data_url(up_menu_music, REPO_MENU_MUSIC) or ""
-INGAME_MUSIC_URL = fileobj_to_data_url(up_ingame_music, REPO_INGAME_MUSIC) or ""
-GAMEOVER_MUSIC_URL = fileobj_to_data_url(up_gameover_music, REPO_GAMEOVER_MUSIC) or ""
-
-START_EFFECT_URL = fileobj_to_data_url(up_start_effect)
-COUNTDOWN_EFFECT_URL = fileobj_to_data_url(up_countdown_effect)
-JUMP_EFFECT_URL = fileobj_to_data_url(up_jump_effect)
-SCORE_EFFECT_URL = fileobj_to_data_url(up_score_effect)
-HIGHSCORE_EFFECT_URL = fileobj_to_data_url(up_highscore_effect)
-ELIM_EFFECT_URL = fileobj_to_data_url(up_elim_effect)
-
-# --------- Start trigger (button on main area) ----------
-start_clicked = st.button("Start Game (3..2..1)")
-
-# --------- Safe HTML/JS template (raw string, NO f-string) ----------
-html_template = r"""
-<!doctype html>
-<html>
+# --------- Premium Game HTML ---------
+game_html = f'''
+<!DOCTYPE html>
+<html lang="en">
 <head>
-<meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Premium Flappy Bird (embedded)</title>
-<style>
-/* compact styles for the embedded game area */
-html,body{margin:0;height:100%;font-family:system-ui;background:#0f1724;color:#fff}
-#wrap{position:relative;height:80vh;display:flex;align-items:center;justify-content:center;padding:20px}
-canvas{border-radius:12px;box-shadow:0 12px 40px rgba(2,6,23,0.8);background:#7fc8ff}
-.ui-top{position:absolute;top:12px;left:12px;right:12px;display:flex;justify-content:space-between;pointer-events:none;z-index:20}
-.ui-top .left,.ui-top .right{pointer-events:auto}
-.btn{background:rgba(0,0,0,0.35);color:white;padding:8px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);cursor:pointer}
-.count-overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;z-index:40;pointer-events:none}
-.count-overlay .val{font-size:120px;font-weight:900;color:white;text-shadow:0 6px 18px rgba(0,0,0,0.8)}
-#tapBtn{position:absolute;right:16px;bottom:24px;z-index:30;padding:12px 14px;border-radius:10px;background:rgba(0,0,0,0.5);border:1px solid rgba(255,255,255,0.06);cursor:pointer}
-.audio-toast{position:absolute;left:16px;bottom:24px;z-index:30;background:rgba(0,0,0,0.5);padding:8px 12px;border-radius:8px}
-@media (max-width:600px){ .count-overlay .val{font-size:64px} canvas{width:calc(100vw - 28px)!important;height:calc((100vw - 28px)*2/3)!important} }
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Premium Flappy Bird</title>
+    <style>
+        * {{
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }}
+
+        body {{
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+        }}
+
+        .game-container {{
+            position: relative;
+            width: 95%;
+            max-width: 900px;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(20px);
+            border-radius: 20px;
+            padding: 20px;
+            box-shadow: 0 25px 50px rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }}
+
+        #gameCanvas {{
+            width: 100%;
+            height: 70vh;
+            background: #000;
+            border-radius: 15px;
+            display: block;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            box-shadow: inset 0 0 50px rgba(0, 0, 0, 0.5);
+        }}
+
+        .controls {{
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 100;
+            display: flex;
+            gap: 10px;
+        }}
+
+        .control-btn {{
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 10px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+        }}
+
+        .control-btn:hover {{
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+        }}
+
+        .score-display {{
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.7);
+            color: #ffd93d;
+            padding: 10px 25px;
+            border-radius: 25px;
+            font-size: 1.5rem;
+            font-weight: 700;
+            z-index: 100;
+            backdrop-filter: blur(10px);
+            border: 2px solid rgba(255, 217, 61, 0.3);
+        }}
+
+        .countdown {{
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 6rem;
+            font-weight: 900;
+            color: #ffd93d;
+            text-shadow: 0 0 30px rgba(255, 217, 61, 0.8);
+            z-index: 200;
+            animation: pulse 1s infinite;
+        }}
+
+        @keyframes pulse {{
+            0%, 100% {{ transform: translate(-50%, -50%) scale(1); opacity: 1; }}
+            50% {{ transform: translate(-50%, -50%) scale(1.1); opacity: 0.7; }}
+        }}
+
+        .start-screen {{
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.85);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 300;
+            border-radius: 15px;
+        }}
+
+        .start-content {{
+            text-align: center;
+            color: white;
+            padding: 40px;
+        }}
+
+        .start-title {{
+            font-size: 3.5rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, #ffd93d, #ff6b6b);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 20px;
+        }}
+
+        .start-subtitle {{
+            font-size: 1.2rem;
+            color: #ccc;
+            margin-bottom: 30px;
+            line-height: 1.6;
+        }}
+
+        .start-btn {{
+            background: linear-gradient(135deg, #ff6b6b, #ffd93d);
+            color: white;
+            border: none;
+            padding: 20px 50px;
+            font-size: 1.5rem;
+            font-weight: 700;
+            border-radius: 15px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 10px 30px rgba(255, 107, 107, 0.4);
+        }}
+
+        .start-btn:hover {{
+            transform: translateY(-5px);
+            box-shadow: 0 15px 40px rgba(255, 107, 107, 0.6);
+        }}
+
+        .game-over {{
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.9);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 400;
+            border-radius: 15px;
+        }}
+
+        .game-over-content {{
+            text-align: center;
+            color: white;
+            padding: 40px;
+        }}
+
+        .character-popup {{
+            position: absolute;
+            bottom: 50px;
+            left: 50%;
+            transform: translateX(-50%);
+            animation: float 3s ease-in-out infinite;
+        }}
+
+        @keyframes float {{
+            0%, 100% {{ transform: translateX(-50%) translateY(0px); }}
+            50% {{ transform: translateX(-50%) translateY(-20px); }}
+        }}
+
+        .bag-popup {{
+            position: absolute;
+            bottom: 120px;
+            left: 50%;
+            transform: translateX(-50%);
+            animation: float 3s ease-in-out infinite 0.5s;
+        }}
+
+        .final-score {{
+            font-size: 4rem;
+            font-weight: 800;
+            color: #ffd93d;
+            margin: 20px 0;
+            text-shadow: 0 0 20px rgba(255, 217, 61, 0.5);
+        }}
+
+        .restart-btn {{
+            background: linear-gradient(135deg, #4ecdc4, #44a08d);
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            font-size: 1.2rem;
+            font-weight: 600;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-top: 20px;
+        }}
+
+        .restart-btn:hover {{
+            transform: translateY(-3px);
+            box-shadow: 0 10px 25px rgba(78, 205, 196, 0.4);
+        }}
+    </style>
 </head>
 <body>
-<div id="wrap">
-  <div class="ui-top">
-    <div class="left"><span id="scoreDisplay" style="font-weight:700;font-size:18px;padding:6px 10px;border-radius:8px;background:rgba(0,0,0,0.35)">Score: 0</span></div>
-    <div class="right"><button id="startPauseBtn" class="btn">Start</button> <button id="muteBtn" class="btn">Mute</button></div>
-  </div>
+    <div class="game-container">
+        <canvas id="gameCanvas"></canvas>
+        
+        <div class="controls">
+            <button class="control-btn" id="musicToggle">🔊 Music</button>
+            <button class="control-btn" id="startBtn">🚀 Start</button>
+        </div>
+        
+        <div class="score-display">
+            Score: <span id="score">0</span>
+        </div>
 
-  <div class="count-overlay" id="countOverlay" style="visibility:hidden"><div class="val" id="countVal">3</div></div>
-  <canvas id="gameCanvas" width="720" height="480"></canvas>
-  <button id="tapBtn">TAP</button>
-  <div class="audio-toast" id="audioToast" style="display:none">🔊 Menu Music</div>
-</div>
+        <div class="countdown" id="countdown" style="display: none;">3</div>
 
-<script>
-(function(){
-  // placeholders replaced server-side
-  const BG_URL = %%BG%%;
-  const PLAYER_URL = %%PLAYER%%;
-  const PIPE_URL = %%PIPE%%;
-  const BAG_URL = %%BAG%%;
+        <div class="start-screen" id="startScreen">
+            <div class="start-content">
+                <div class="start-title">🎮 Flappy Bird</div>
+                <div class="start-subtitle">
+                    Customize your game with amazing visuals and audio!<br>
+                    Avoid obstacles and achieve the highest score!
+                </div>
+                <button class="start-btn" id="mainStartBtn">START GAME</button>
+            </div>
+        </div>
 
-  const MENU_MUSIC_URL = %%MENU%%;
-  const INGAME_MUSIC_URL = %%INGAME%%;
-  const GAMEOVER_MUSIC_URL = %%GAMEOVER%%;
+        <div class="game-over" id="gameOverScreen">
+            <div class="game-over-content">
+                <div style="font-size: 3rem; color: #ff6b6b; margin-bottom: 20px;">💀 Game Over</div>
+                <div class="final-score" id="finalScore">0</div>
+                <div style="color: #ccc; margin-bottom: 30px; font-size: 1.1rem;">
+                    Better luck next time! 🎯
+                </div>
+                <img src="{BAG_URL or PLAYER_URL}" class="bag-popup" style="width: 80px; height: 80px; border-radius: 10px;" alt="Bag">
+                <img src="{PLAYER_URL}" class="character-popup" style="width: 100px; height: 100px; border-radius: 15px;" alt="Character">
+                <br>
+                <button class="restart-btn" id="restartBtn">🔄 Play Again</button>
+            </div>
+        </div>
+    </div>
 
-  const START_EFFECT_URL = %%STARTEFF%%;
-  const COUNTDOWN_EFFECT_URL = %%COUNTEFF%%;
-  const JUMP_EFFECT_URL = %%JUMP%%;
-  const SCORE_EFFECT_URL = %%SCORE%%;
-  const HIGHSCORE_EFFECT_URL = %%HIGHSCORE%%;
-  const ELIM_EFFECT_URL = %%ELIM%%;
+    <script>
+        // Game Configuration
+        const CONFIG = {{
+            PLAYER_URL: "{PLAYER_URL}",
+            PIPE_URL: "{PIPE_URL}",
+            BG_URL: "{BG_URL}",
+            MENU_MUSIC_URL: {('"' + MENU_MUSIC_URL + '"') if MENU_MUSIC_URL else 'null'},
+            INGAME_MUSIC_URL: {('"' + INGAME_MUSIC_URL + '"') if INGAME_MUSIC_URL else 'null'},
+            GAMEOVER_MUSIC_URL: {('"' + GAMEOVER_MUSIC_URL + '"') if GAMEOVER_MUSIC_URL else 'null'},
+            GAME_SPEED: {game_speed},
+            GRAVITY: {gravity_strength},
+            JUMP_POWER: -{jump_power},
+            PIPE_GAP: {pipe_gap}
+        }};
 
-  const CONFIG = {
-    SPEED: %%SPEED%%,
-    GRAVITY: %%GRAV%%,
-    JUMP_POWER: %%JUMP_POW%%,
-    PIPE_GAP: %%PIPE_GAP%%
-  };
+        // Game State
+        let gameState = {{
+            menuAudio: null,
+            ingameAudio: null,
+            gameoverAudio: null,
+            musicEnabled: true,
+            gameRunning: false,
+            gameOver: false,
+            score: 0,
+            player: {{ x: 100, y: 200, vy: 0, size: 50 }},
+            pipes: [],
+            pipeTimer: 0,
+            lastTime: performance.now(),
+            images: {{ bg: null, player: null, pipe: null }},
+            countdownActive: false,
+            countdownValue: 3
+        }};
 
-  const canvas = document.getElementById('gameCanvas');
-  const ctx = canvas.getContext('2d');
-  let W = canvas.width, H = canvas.height;
+        // DOM Elements
+        const elements = {{
+            canvas: document.getElementById('gameCanvas'),
+            startScreen: document.getElementById('startScreen'),
+            gameOverScreen: document.getElementById('gameOverScreen'),
+            countdown: document.getElementById('countdown'),
+            score: document.getElementById('score'),
+            finalScore: document.getElementById('finalScore'),
+            musicToggle: document.getElementById('musicToggle'),
+            startBtn: document.getElementById('startBtn'),
+            mainStartBtn: document.getElementById('mainStartBtn'),
+            restartBtn: document.getElementById('restartBtn')
+        }};
 
-  // images
-  const bgImg = new Image(); if(BG_URL) bgImg.src = BG_URL;
-  const playerImg = new Image(); if(PLAYER_URL) playerImg.src = PLAYER_URL;
-  const pipeImg = new Image(); if(PIPE_URL) pipeImg.src = PIPE_URL;
-  const bagImg = new Image(); if(BAG_URL) bagImg.src = BAG_URL;
+        const ctx = elements.canvas.getContext('2d');
 
-  // audio objects
-  const homeAudio = MENU_MUSIC_URL ? new Audio(MENU_MUSIC_URL) : null;
-  if(homeAudio) { homeAudio.loop = true; homeAudio.volume = 0.5; }
-  const ingameAudio = INGAME_MUSIC_URL ? new Audio(INGAME_MUSIC_URL) : null;
-  if(ingameAudio) { ingameAudio.loop = true; ingameAudio.volume = 0.5; }
-  const gameoverAudio = GAMEOVER_MUSIC_URL ? new Audio(GAMEOVER_MUSIC_URL) : null;
-  if(gameoverAudio) { gameoverAudio.volume = 0.6; }
+        // Initialize Game
+        function initGame() {{
+            setupEventListeners();
+            loadAssets();
+            setupAudio();
+            resizeCanvas();
+            renderMenu();
+        }}
 
-  // effects
-  const startEff = START_EFFECT_URL ? new Audio(START_EFFECT_URL) : null;
-  const countEff = COUNTDOWN_EFFECT_URL ? new Audio(COUNTDOWN_EFFECT_URL) : null;
-  const jumpEff = JUMP_EFFECT_URL ? new Audio(JUMP_EFFECT_URL) : null;
-  const scoreEff = SCORE_EFFECT_URL ? new Audio(SCORE_EFFECT_URL) : null;
-  const highEff = HIGHSCORE_EFFECT_URL ? new Audio(HIGHSCORE_EFFECT_URL) : null;
-  const elimEff = ELIM_EFFECT_URL ? new Audio(ELIM_EFFECT_URL) : null;
+        // Setup Event Listeners
+        function setupEventListeners() {{
+            // Window resize
+            window.addEventListener('resize', resizeCanvas);
 
-  // small beep fallback using WebAudio if available
-  let audioCtx = null;
-  try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch(e){ audioCtx = null; }
-  function beep(f,d){ if(!audioCtx) return; try{ const o=audioCtx.createOscillator(); const g=audioCtx.createGain(); o.type='sine'; o.frequency.value=f; g.gain.setValueAtTime(0.12, audioCtx.currentTime); o.connect(g); g.connect(audioCtx.destination); o.start(); o.stop(audioCtx.currentTime + d); }catch(e){} }
+            // Music toggle
+            elements.musicToggle.addEventListener('click', toggleMusic);
 
-  // state
-  let playing=false, paused=false;
-  let bird = { x: 120, y: H/2, vel:0, w:48, h:36 };
-  let pipes = [], spawnTimer = 0, score = 0, best = 0;
-  try{ best = parseInt(localStorage.getItem('flappy_best')||'0'); }catch(e){ best = 0; }
-  document.getElementById('scoreDisplay').textContent = `Score: ${score} | Best: ${best}`;
+            // Start buttons
+            elements.mainStartBtn.addEventListener('click', startGame);
+            elements.startBtn.addEventListener('click', startGame);
+            elements.restartBtn.addEventListener('click', restartGame);
 
-  // start/pause/mute controls
-  const startPauseBtn = document.getElementById('startPauseBtn');
-  const muteBtn = document.getElementById('muteBtn');
-  const tapBtn = document.getElementById('tapBtn');
-  const audioToast = document.getElementById('audioToast');
-  startPauseBtn.addEventListener('click', ()=>{ if(!playing){ startSequence(); } else { paused = !paused; startPauseBtn.textContent = paused ? 'Resume' : 'Pause'; if(paused){ if(ingameAudio) ingameAudio.pause(); } else { if(ingameAudio) ingameAudio.play().catch(()=>{}); } } });
-  muteBtn.addEventListener('click', ()=>{ if(homeAudio) homeAudio.muted = !homeAudio.muted; if(ingameAudio) ingameAudio.muted = homeAudio ? homeAudio.muted : (ingameAudio.muted?false:true); muteBtn.textContent = (homeAudio && homeAudio.muted) ? 'Unmute' : 'Mute'; });
+            // Game controls
+            window.addEventListener('keydown', (e) => {{
+                if (e.code === 'Space' || e.key === 'ArrowUp') flap();
+            }});
+            elements.canvas.addEventListener('mousedown', flap);
+            elements.canvas.addEventListener('touchstart', (e) => {{
+                e.preventDefault();
+                flap();
+            }}, {{passive: false}});
+        }}
 
-  // input
-  window.addEventListener('keydown', (e)=>{ if(e.code==='Space') flap(); });
-  canvas.addEventListener('mousedown', flap);
-  canvas.addEventListener('touchstart', (e)=>{ e.preventDefault(); flap(); }, {passive:false});
-  tapBtn.addEventListener('click', flap);
+        // Audio Management
+        function setupAudio() {{
+            if (CONFIG.MENU_MUSIC_URL) {{
+                gameState.menuAudio = new Audio(CONFIG.MENU_MUSIC_URL);
+                gameState.menuAudio.loop = true;
+                gameState.menuAudio.volume = 0.4;
+            }}
+            if (CONFIG.INGAME_MUSIC_URL) {{
+                gameState.ingameAudio = new Audio(CONFIG.INGAME_MUSIC_URL);
+                gameState.ingameAudio.loop = true;
+                gameState.ingameAudio.volume = 0.4;
+            }}
+            if (CONFIG.GAMEOVER_MUSIC_URL) {{
+                gameState.gameoverAudio = new Audio(CONFIG.GAMEOVER_MUSIC_URL);
+                gameState.gameoverAudio.volume = 0.4;
+            }}
 
-  // helpers
-  function updateScoreDisplay(){ document.getElementById('scoreDisplay').textContent = `Score: ${score} | Best: ${best}`; }
+            // Load music preference
+            try {{
+                const saved = localStorage.getItem('flappy_music_enabled');
+                if (saved !== null) gameState.musicEnabled = saved === '1';
+                updateMusicButton();
+            }} catch (e) {{}}
+        }}
 
-  function flap(){ bird.vel = -Math.abs(CONFIG.JUMP_POWER); try{ if(jumpEff){ jumpEff.currentTime = 0; jumpEff.play().catch(()=>{}); } else beep(880,0.05); }catch(e){} }
+        function toggleMusic() {{
+            gameState.musicEnabled = !gameState.musicEnabled;
+            updateMusicButton();
+            try {{
+                localStorage.setItem('flappy_music_enabled', gameState.musicEnabled ? '1' : '0');
+            }} catch (e) {{}}
 
-  function resetGame(){ bird.y = H/2; bird.vel = 0; pipes = []; spawnTimer = 0; score = 0; updateScoreDisplay(); }
+            if (!gameState.musicEnabled) {{
+                stopAllAudio();
+            }} else {{
+                playCurrentAudio();
+            }}
+        }}
 
-  function spawnPipe(){ const gap = CONFIG.PIPE_GAP; const top = 80 + Math.random()*(H - 260); pipes.push({ x: W + 40, top: top, gap: gap, scored:false }); }
+        function updateMusicButton() {{
+            elements.musicToggle.textContent = gameState.musicEnabled ? '🔊 Music' : '🔇 Music';
+        }}
 
-  // start sequence with countdown
-  function startSequence(){ // show countdown 3..2..1
-    document.getElementById('countOverlay').style.visibility = 'visible';
-    let n = 3;
-    document.getElementById('countVal').textContent = n;
-    try{ if(startEff){ startEff.currentTime=0; startEff.play().catch(()=>{}); } }catch(e){}
-    const t = setInterval(()=>{ n--; if(n>0){ document.getElementById('countVal').textContent = n; try{ if(countEff){ countEff.currentTime=0; countEff.play().catch(()=>{}); } else beep(800,0.04);}catch(e){} } else { clearInterval(t); document.getElementById('countOverlay').style.visibility='hidden'; startGame(); } }, 1000);
-  }
+        function stopAllAudio() {{
+            if (gameState.menuAudio) gameState.menuAudio.pause();
+            if (gameState.ingameAudio) gameState.ingameAudio.pause();
+            if (gameState.gameoverAudio) gameState.gameoverAudio.pause();
+        }}
 
-  function startGame(){ playing=true; paused=false; startPauseBtn.textContent='Pause'; resetGame(); if(homeAudio) try{ homeAudio.pause(); }catch(e){} if(ingameAudio) try{ ingameAudio.play().catch(()=>{}); }catch(e){} requestAnimationFrame(loop); audioToast.style.display = 'block'; audioToast.textContent = '🎮 Game Music'; }
+        function playCurrentAudio() {{
+            if (!gameState.musicEnabled) return;
+            
+            if (gameState.gameOver && gameState.gameoverAudio) {{
+                gameState.gameoverAudio.play().catch(() => {{}});
+            }} else if (gameState.gameRunning && gameState.ingameAudio) {{
+                gameState.ingameAudio.play().catch(() => {{}});
+            }} else if (gameState.menuAudio) {{
+                gameState.menuAudio.play().catch(() => {{}});
+            }}
+        }}
 
-  function endGame(){ playing=false; try{ if(ingameAudio) ingameAudio.pause(); if(gameoverAudio) { gameoverAudio.currentTime = 0; gameoverAudio.play().catch(()=>{}); } }catch(e){} if(score>best){ best = score; try{ localStorage.setItem('flappy_best', String(best)); }catch(e){} } updateScoreDisplay(); // show small gameover toast
-    audioToast.style.display='block'; audioToast.textContent='💀 Game Over Music';
-    try{ if(elimEff){ elimEff.currentTime=0; elimEff.play().catch(()=>{}); } }catch(e){}
-  }
+        // Asset Loading
+        function loadImage(url) {{
+            return new Promise((resolve, reject) => {{
+                const img = new Image();
+                img.onload = () => resolve(img);
+                img.onerror = reject;
+                img.src = url;
+            }});
+        }}
 
-  // main loop
-  let lastTs = null;
-  function loop(ts){
-    if(!lastTs) lastTs = ts;
-    const dt = ts - lastTs;
-    lastTs = ts;
+        async function loadAssets() {{
+            try {{
+                if (CONFIG.BG_URL) gameState.images.bg = await loadImage(CONFIG.BG_URL);
+                if (CONFIG.PLAYER_URL) gameState.images.player = await loadImage(CONFIG.PLAYER_URL);
+                if (CONFIG.PIPE_URL) gameState.images.pipe = await loadImage(CONFIG.PIPE_URL);
+            }} catch (error) {{
+                console.warn('Failed to load some assets:', error);
+            }}
+        }}
 
-    if(!paused && playing){
-      bird.vel += CONFIG.GRAVITY * (dt/16);
-      bird.y += bird.vel * (dt/16);
+        // Game Flow
+        function startGame() {{
+            elements.startScreen.style.display = 'none';
+            gameState.gameRunning = true;
+            gameState.gameOver = false;
+            
+            if (gameState.menuAudio) gameState.menuAudio.pause();
+            
+            startCountdown();
+        }}
 
-      spawnTimer += dt;
-      if(spawnTimer > 1600){ spawnTimer = 0; spawnPipe(); }
+        function startCountdown() {{
+            gameState.countdownActive = true;
+            gameState.countdownValue = 3;
+            elements.countdown.style.display = 'block';
+            elements.countdown.textContent = gameState.countdownValue;
 
-      // move pipes
-      for(let i=pipes.length-1;i>=0;i--){
-        pipes[i].x -= (CONFIG.SPEED + Math.min(score/100,2)) * (dt/16);
-        if(!pipes[i].scored && (pipes[i].x + 40) < bird.x){ pipes[i].scored = true; score++; try{ if(score<=5 && scoreEff){ scoreEff.currentTime=0; scoreEff.play().catch(()=>{}); } else if(score>5 && highEff){ highEff.currentTime=0; highEff.play().catch(()=>{}); } }catch(e){} if(score>best){ best = score; try{ localStorage.setItem('flappy_best', String(best)); }catch(e){} } updateScoreDisplay(); }
-        if(pipes[i].x < -120) pipes.splice(i,1);
-      }
+            const countdownInterval = setInterval(() => {{
+                gameState.countdownValue--;
+                elements.countdown.textContent = gameState.countdownValue;
 
-      // collisions
-      if(bird.y - bird.h/2 <= 0 || bird.y + bird.h/2 >= H){ endGame(); }
+                if (gameState.countdownValue <= 0) {{
+                    clearInterval(countdownInterval);
+                    elements.countdown.style.display = 'none';
+                    gameState.countdownActive = false;
+                    resetGame();
+                    gameState.lastTime = performance.now();
+                    if (gameState.musicEnabled && gameState.ingameAudio) {{
+                        gameState.ingameAudio.play().catch(() => {{}});
+                    }}
+                    requestAnimationFrame(gameLoop);
+                }}
+            }}, 1000);
+        }}
 
-      for(const p of pipes){
-        const pw = 60;
-        if(bird.x + bird.w/2 > p.x && bird.x - bird.w/2 < p.x + pw){
-          if(bird.y - bird.h/2 < p.top || bird.y + bird.h/2 > p.top + p.gap){ endGame(); break; }
-        }
-      }
-    }
+        function restartGame() {{
+            elements.gameOverScreen.style.display = 'none';
+            startGame();
+        }}
 
-    // draw
-    ctx.clearRect(0,0,W,H);
-    if(BG_URL){
-      try{ ctx.drawImage(bgImg, 0, 0, W, H); }catch(e){ ctx.fillStyle='#70c5ce'; ctx.fillRect(0,0,W,H); }
-    } else { ctx.fillStyle='#70c5ce'; ctx.fillRect(0,0,W,H); }
+        function endGame() {{
+            gameState.gameRunning = false;
+            gameState.gameOver = true;
 
-    // pipes
-    ctx.fillStyle = '#2d8f39';
-    for(const p of pipes){
-      const pipeW = 60;
-      if(PIPE_URL){
-        try{ ctx.drawImage(pipeImg, p.x - pipeW/2, 0, pipeW, p.top); }catch(e){ ctx.fillRect(p.x - pipeW/2, 0, pipeW, p.top); }
-        try{ ctx.drawImage(pipeImg, p.x - pipeW/2, p.top + p.gap, pipeW, H - (p.top + p.gap)); }catch(e){ ctx.fillRect(p.x - pipeW/2, p.top + p.gap, pipeW, H - (p.top + p.gap)); }
-      } else {
-        ctx.fillRect(p.x - pipeW/2, 0, pipeW, p.top);
-        ctx.fillRect(p.x - pipeW/2, p.top + p.gap, pipeW, H - (p.top + p.gap));
-      }
-    }
+            if (gameState.ingameAudio) gameState.ingameAudio.pause();
+            
+            elements.finalScore.textContent = gameState.score;
+            elements.gameOverScreen.style.display = 'flex';
 
-    // bird
-    if(PLAYER_URL){
-      try{
-        ctx.save();
-        const rot = Math.max(-0.6, Math.min(0.6, bird.vel / 12));
-        ctx.translate(bird.x, bird.y);
-        ctx.rotate(rot);
-        ctx.drawImage(playerImg, -bird.w/2, -bird.h/2, bird.w, bird.h);
-        ctx.restore();
-      }catch(e){
-        ctx.fillStyle='yellow'; ctx.beginPath(); ctx.ellipse(bird.x,bird.y,18,14,0,0,Math.PI*2); ctx.fill();
-      }
-    } else {
-      ctx.fillStyle='yellow'; ctx.beginPath(); ctx.ellipse(bird.x,bird.y,18,14,0,0,Math.PI*2); ctx.fill();
-    }
+            if (gameState.musicEnabled && gameState.gameoverAudio) {{
+                gameState.gameoverAudio.currentTime = 0;
+                gameState.gameoverAudio.play().catch(() => {{}});
+            }}
 
-    if(playing) requestAnimationFrame(loop);
-  }
+            // Save best score
+            try {{
+                const best = parseInt(localStorage.getItem('flappy_best') || '0');
+                if (gameState.score > best) {{
+                    localStorage.setItem('flappy_best', gameState.score.toString());
+                }}
+            }} catch (e) {{}}
+        }}
 
-  // responsive resize
-  function resizeCanvas(){
-    const containerW = Math.min(window.innerWidth - 80, 900);
-    const containerH = Math.min(window.innerHeight - 200, 700);
-    const ratio = 3/2;
-    let cw = containerW, ch = Math.round(cw / ratio);
-    if(ch > containerH){ ch = containerH; cw = Math.round(ch * ratio); }
-    canvas.width = cw; canvas.height = ch; W = canvas.width; H = canvas.height;
-  }
-  window.addEventListener('resize', resizeCanvas);
-  resizeCanvas();
+        // Game Logic
+        function resetGame() {{
+            gameState.score = 0;
+            gameState.player.y = elements.canvas.height / 2;
+            gameState.player.vy = 0;
+            gameState.pipes = [];
+            gameState.pipeTimer = 0;
+            elements.score.textContent = '0';
+        }}
 
-  // attempt autoplay menu audio (may be blocked)
-  if(homeAudio){
-    homeAudio.play().then(()=>{ audioToast.style.display='block'; audioToast.textContent='🔊 Menu Music'; }).catch(()=>{ /* blocked */ });
-  }
+        function spawnPipe() {{
+            const margin = elements.canvas.height * 0.15;
+            const center = Math.random() * (elements.canvas.height - margin * 2 - CONFIG.PIPE_GAP) + margin + CONFIG.PIPE_GAP / 2;
+            gameState.pipes.push({{ x: elements.canvas.width + 100, center, scored: false }});
+        }}
 
-  // If play-home button was clicked on server side, Streamlit sets value; but since we're embedding we rely on page interaction
-  // Expose helper for local save
-  window._getLocalScores = function(){ try{ return JSON.parse(localStorage.getItem('scores_local')||'{"scores":[]}'); }catch(e){ return {scores:[]}; } };
+        function update(deltaTime) {{
+            if (!gameState.gameRunning || gameState.gameOver || gameState.countdownActive) return;
 
-})();
-</script>
+            // Spawn pipes
+            gameState.pipeTimer += deltaTime;
+            if (gameState.pipeTimer > 1800) {{
+                gameState.pipeTimer = 0;
+                spawnPipe();
+            }}
+
+            // Update pipes
+            gameState.pipes.forEach(pipe => {{
+                pipe.x -= (CONFIG.GAME_SPEED * 0.8) * (deltaTime / 16);
+            }});
+
+            // Remove off-screen pipes
+            if (gameState.pipes.length > 0 && gameState.pipes[0].x + 120 < 0) {{
+                gameState.pipes.shift();
+            }}
+
+            // Update player
+            gameState.player.vy += CONFIG.GRAVITY * (deltaTime / 16);
+            gameState.player.y += gameState.player.vy * (deltaTime / 16);
+
+            // Check collisions
+            checkCollisions();
+
+            // Check boundaries
+            if (gameState.player.y + gameState.player.size > elements.canvas.height - 10) {{
+                endGame();
+            }}
+            if (gameState.player.y < 0) {{
+                gameState.player.y = 0;
+                gameState.player.vy = 0;
+            }}
+        }}
+
+        function checkCollisions() {{
+            const playerRect = {{
+                x: gameState.player.x,
+                y: gameState.player.y,
+                width: gameState.player.size,
+                height: gameState.player.size
+            }};
+
+            for (const pipe of gameState.pipes) {{
+                const pipeWidth = elements.canvas.width * 0.08;
+                const topHeight = pipe.center - (CONFIG.PIPE_GAP / 2);
+                const bottomY = pipe.center + (CONFIG.PIPE_GAP / 2);
+
+                // Score point
+                if (!pipe.scored && pipe.x + pipeWidth < gameState.player.x) {{
+                    pipe.scored = true;
+                    gameState.score++;
+                    elements.score.textContent = gameState.score;
+                }}
+
+                // Collision detection
+                const topPipe = {{ x: pipe.x, y: 0, width: pipeWidth, height: topHeight }};
+                const bottomPipe = {{ x: pipe.x, y: bottomY, width: pipeWidth, height: elements.canvas.height - bottomY }};
+
+                if (checkRectCollision(playerRect, topPipe) || checkRectCollision(playerRect, bottomPipe)) {{
+                    endGame();
+                    return;
+                }}
+            }}
+        }}
+
+        function checkRectCollision(rect1, rect2) {{
+            return rect1.x < rect2.x + rect2.width &&
+                   rect1.x + rect1.width > rect2.x &&
+                   rect1.y < rect2.y + rect2.height &&
+                   rect1.y + rect1.height > rect2.y;
+        }}
+
+        function flap() {{
+            if (!gameState.gameRunning || gameState.gameOver || gameState.countdownActive) return;
+            gameState.player.vy = CONFIG.JUMP_POWER;
+        }}
+
+        // Rendering
+        function render() {{
+            // Clear canvas
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, 0, elements.canvas.width, elements.canvas.height);
+
+            // Draw background
+            if (gameState.images.bg) {{
+                ctx.drawImage(gameState.images.bg, 0, 0, elements.canvas.width, elements.canvas.height);
+            }} else {{
+                const gradient = ctx.createLinearGradient(0, 0, elements.canvas.width, elements.canvas.height);
+                gradient.addColorStop(0, '#1e3c72');
+                gradient.addColorStop(1, '#2a5298');
+                ctx.fillStyle = gradient;
+                ctx.fillRect(0, 0, elements.canvas.width, elements.canvas.height);
+            }}
+
+            // Draw pipes
+            gameState.pipes.forEach(pipe => {{
+                const pipeWidth = elements.canvas.width * 0.08;
+                const topHeight = pipe.center - (CONFIG.PIPE_GAP / 2);
+
+                if (gameState.images.pipe) {{
+                    ctx.drawImage(gameState.images.pipe, pipe.x, 0, pipeWidth, topHeight);
+                    ctx.drawImage(gameState.images.pipe, pipe.x, pipe.center + (CONFIG.PIPE_GAP / 2), pipeWidth, elements.canvas.height - (pipe.center + (CONFIG.PIPE_GAP / 2)));
+                }} else {{
+                    const pipeGradient = ctx.createLinearGradient(pipe.x, 0, pipe.x + pipeWidth, 0);
+                    pipeGradient.addColorStop(0, '#2ecc71');
+                    pipeGradient.addColorStop(1, '#27ae60');
+                    ctx.fillStyle = pipeGradient;
+                    ctx.fillRect(pipe.x, 0, pipeWidth, topHeight);
+                    ctx.fillRect(pipe.x, pipe.center + (CONFIG.PIPE_GAP / 2), pipeWidth, elements.canvas.height - (pipe.center + (CONFIG.PIPE_GAP / 2)));
+                }}
+            }});
+
+            // Draw player
+            if (gameState.images.player) {{
+                ctx.drawImage(gameState.images.player, gameState.player.x, gameState.player.y, gameState.player.size, gameState.player.size);
+            }} else {{
+                ctx.fillStyle = '#f1c40f';
+                ctx.fillRect(gameState.player.x, gameState.player.y, gameState.player.size, gameState.player.size);
+            }}
+        }}
+
+        function renderMenu() {{
+            render();
+        }}
+
+        // Game Loop
+        function gameLoop(currentTime) {{
+            const deltaTime = currentTime - gameState.lastTime;
+            gameState.lastTime = currentTime;
+
+            update(deltaTime);
+            render();
+
+            if (gameState.gameRunning && !gameState.gameOver) {{
+                requestAnimationFrame(gameLoop);
+            }}
+        }}
+
+        // Utility Functions
+        function resizeCanvas() {{
+            elements.canvas.width = Math.min(window.innerWidth * 0.95, 900);
+            elements.canvas.height = Math.min(window.innerHeight * 0.7, 600);
+            if (!gameState.gameRunning) {{
+                renderMenu();
+            }}
+        }}
+
+        // Start the game when page loads
+        window.addEventListener('load', initGame);
+    </script>
 </body>
 </html>
-"""
+'''
 
-# --------- safe replacements ----------
-final_html = html_template
-# inject JSON-encoded strings to ensure proper quoting
-final_html = final_html.replace("%%BG%%", json.dumps(BG_URL))
-final_html = final_html.replace("%%PLAYER%%", json.dumps(PLAYER_URL))
-final_html = final_html.replace("%%PIPE%%", json.dumps(PIPE_URL))
-final_html = final_html.replace("%%BAG%%", json.dumps(BAG_URL))
+# Render the game
+st.components.v1.html(game_html, height=800, scrolling=False)
 
-final_html = final_html.replace("%%MENU%%", json.dumps(MENU_MUSIC_URL))
-final_html = final_html.replace("%%INGAME%%", json.dumps(INGAME_MUSIC_URL))
-final_html = final_html.replace("%%GAMEOVER%%", json.dumps(GAMEOVER_MUSIC_URL))
-
-final_html = final_html.replace("%%STARTEFF%%", json.dumps(START_EFFECT_URL))
-final_html = final_html.replace("%%COUNTEFF%%", json.dumps(COUNTDOWN_EFFECT_URL))
-final_html = final_html.replace("%%JUMP%%", json.dumps(JUMP_EFFECT_URL))
-final_html = final_html.replace("%%SCORE%%", json.dumps(SCORE_EFFECT_URL))
-final_html = final_html.replace("%%HIGHSCORE%%", json.dumps(HIGHSCORE_EFFECT_URL))
-final_html = final_html.replace("%%ELIM%%", json.dumps(ELIM_EFFECT_URL))
-
-# numeric settings
-final_html = final_html.replace("%%SPEED%%", str(game_speed))
-final_html = final_html.replace("%%GRAV%%", str(gravity_strength))
-final_html = final_html.replace("%%JUMP_POW%%", str(jump_power))
-final_html = final_html.replace("%%PIPE_GAP%%", str(pipe_gap))
-
-# Render the embedded game (height tuned for canvas + UI)
-html(final_html, height=760, scrolling=True)
-
-# --------- Server-side manual score save helper (optional) ----------
+# Features Section
 st.markdown("---")
-st.write("If you want to save scores server-side: open browser console after a run and run `copy(window._getLocalScores())`, paste here and Save.")
-paste_area = st.text_area("Paste JSON from console or paste integer score:", height=140)
-if st.button("Save pasted score to server"):
-    if not paste_area.strip():
-        st.error("Paste something first.")
-    else:
-        try:
-            obj = json.loads(paste_area)
-            if isinstance(obj, dict) and "scores" in obj and obj["scores"]:
-                last = int(obj["scores"][-1])
-            else:
-                last = int(paste_area.strip())
-            p = Path("scores.json")
-            s = {"best": 0, "history": []}
-            if p.exists():
-                try:
-                    s = json.loads(p.read_text(encoding="utf8"))
-                except:
-                    s = {"best": 0, "history": []}
-            if last > s.get("best", 0):
-                s["best"] = last
-            s.setdefault("history", []).append({"score": last, "time": int(time.time())})
-            p.write_text(json.dumps(s, indent=2), encoding="utf8")
-            st.success(f"Saved score {last} to scores.json")
-        except Exception as e:
-            st.error("Couldn't parse pasted content. Error: " + str(e))
+st.markdown("## 🎯 Premium Features")
+
+col1, col2, col3 = st.columns(3)
+
+with col1:
+    st.markdown("""
+    ### 🎨 Visual Excellence
+    - **High-quality graphics**
+    - **Smooth animations** 
+    - **Character pop-up effects**
+    - **Professional UI/UX**
+    """)
+
+with col2:
+    st.markdown("""
+    ### 🎵 Audio Mastery
+    - **Menu music system**
+    - **In-game soundtrack**
+    - **Game-over music**
+    - **Audio controls**
+    """)
+
+with col3:
+    st.markdown("""
+    ### ⚡ Game Enhancements
+    - **3-second countdown**
+    - **Customizable difficulty**
+    - **Score tracking**
+    - **Responsive design**
+    """)
+
+st.markdown("---")
+st.markdown("### 🎮 How to Play")
+st.markdown("""
+1. **Customize** your game using the sidebar options
+2. **Click START GAME** to begin with a 3-second countdown
+3. **Press SPACE, CLICK, or ARROW UP** to make the bird jump
+4. **Avoid obstacles** and score points
+5. **Enjoy** your customized gaming experience!
+""")
