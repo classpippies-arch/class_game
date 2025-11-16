@@ -68,10 +68,20 @@ with st.sidebar:
 
     with st.container():
         st.markdown("#### 🎵 Audio Library")
-        with st.expander("Music Settings", expanded=True):
+        with st.expander("Music & Sound Effects", expanded=True):
+            st.markdown("**🎵 Background Music**")
             up_menu_music = st.file_uploader("🏠 Menu Music", type=["mp3","ogg","wav"], key="menu_music")
             up_ingame_music = st.file_uploader("🎮 Game Music", type=["mp3","ogg","wav"], key="ingame_music")
             up_gameover_music = st.file_uploader("💀 Game Over Music", type=["mp3","ogg","wav"], key="gameover_music")
+            
+            st.markdown("**🔊 Sound Effects**")
+            up_start_effect = st.file_uploader("🚀 Game Start Effect", type=["mp3","ogg","wav"], key="start_effect")
+            up_countdown_effect = st.file_uploader("⏱️ Countdown Effect", type=["mp3","ogg","wav"], key="countdown_effect")
+            up_jump_effect = st.file_uploader("🦅 Jump Effect", type=["mp3","ogg","wav"], key="jump_effect")
+            up_score_effect = st.file_uploader("⭐ Score Effect (0-5)", type=["mp3","ogg","wav"], key="score_effect")
+            up_highscore_effect = st.file_uploader("🏆 High Score Effect (6-10)", type=["mp3","ogg","wav"], key="highscore_effect")
+            up_random_effect = st.file_uploader("🎲 Random Effect", type=["mp3","ogg","wav"], key="random_effect")
+            up_elimination_effect = st.file_uploader("💥 Elimination Effect", type=["mp3","ogg","wav"], key="elimination_effect")
 
     with st.container():
         st.markdown("#### ⚙️ Game Settings")
@@ -124,18 +134,26 @@ REPO_BG = "background_image.png"
 REPO_PLAYER = "player_character.png"
 REPO_PIPE = "obstacle_enemy.png"
 REPO_BAG = "player_character.png"  # Fallback to player image
-REPO_MENU_MUSIC = "Home Screen Music (Only on Menu Screen).mp3"
-REPO_INGAME_MUSIC = "ingame_music_1.mp3"
-REPO_GAMEOVER_MUSIC = "ingame_music_2.mp3"
 
 # Process files
 BG_URL = fileobj_to_data_url(up_bg, REPO_BG) or ""
 PLAYER_URL = fileobj_to_data_url(up_player, REPO_PLAYER) or ""
 PIPE_URL = fileobj_to_data_url(up_pipe, REPO_PIPE) or ""
 BAG_URL = fileobj_to_data_url(up_bag, REPO_BAG) or ""
-MENU_MUSIC_URL = fileobj_to_data_url(up_menu_music, REPO_MENU_MUSIC)
-INGAME_MUSIC_URL = fileobj_to_data_url(up_ingame_music, REPO_INGAME_MUSIC)
-GAMEOVER_MUSIC_URL = fileobj_to_data_url(up_gameover_music, REPO_GAMEOVER_MUSIC)
+
+# Music files
+MENU_MUSIC_URL = fileobj_to_data_url(up_menu_music, "very starting point.mp3")
+INGAME_MUSIC_URL = fileobj_to_data_url(up_ingame_music, "random effect.mp3")
+GAMEOVER_MUSIC_URL = fileobj_to_data_url(up_gameover_music, "ending effect.mp3")
+
+# Sound effects
+START_EFFECT_URL = fileobj_to_data_url(up_start_effect, "game starting effect.mp3")
+COUNTDOWN_EFFECT_URL = fileobj_to_data_url(up_countdown_effect, "starting effect.mp3")
+JUMP_EFFECT_URL = fileobj_to_data_url(up_jump_effect, "random effect used in game.mp3")
+SCORE_EFFECT_URL = fileobj_to_data_url(up_score_effect, "0 to 5 elimination effect.mp3")
+HIGHSCORE_EFFECT_URL = fileobj_to_data_url(up_highscore_effect, "6 to 10 point effect.mp3")
+RANDOM_EFFECT_URL = fileobj_to_data_url(up_random_effect, "random effect.mp3")
+ELIMINATION_EFFECT_URL = fileobj_to_data_url(up_elimination_effect, "0 to 5 elimination effect.mp3")
 
 # --------- Premium Game HTML ---------
 game_html = f'''
@@ -364,6 +382,18 @@ game_html = f'''
             transform: translateY(-3px);
             box-shadow: 0 10px 25px rgba(78, 205, 196, 0.4);
         }}
+
+        .audio-status {{
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 8px 15px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            z-index: 100;
+        }}
     </style>
 </head>
 <body>
@@ -371,13 +401,15 @@ game_html = f'''
         <canvas id="gameCanvas"></canvas>
         
         <div class="controls">
-            <button class="control-btn" id="musicToggle">🔊 Music</button>
+            <button class="control-btn" id="musicToggle">🔊 Music ON</button>
             <button class="control-btn" id="startBtn">🚀 Start</button>
         </div>
         
         <div class="score-display">
             Score: <span id="score">0</span>
         </div>
+
+        <div class="audio-status" id="audioStatus">🔊 Menu Music</div>
 
         <div class="countdown" id="countdown" style="display: none;">3</div>
 
@@ -413,9 +445,22 @@ game_html = f'''
             PLAYER_URL: "{PLAYER_URL}",
             PIPE_URL: "{PIPE_URL}",
             BG_URL: "{BG_URL}",
+            
+            // Background Music
             MENU_MUSIC_URL: {('"' + MENU_MUSIC_URL + '"') if MENU_MUSIC_URL else 'null'},
             INGAME_MUSIC_URL: {('"' + INGAME_MUSIC_URL + '"') if INGAME_MUSIC_URL else 'null'},
             GAMEOVER_MUSIC_URL: {('"' + GAMEOVER_MUSIC_URL + '"') if GAMEOVER_MUSIC_URL else 'null'},
+            
+            // Sound Effects
+            START_EFFECT_URL: {('"' + START_EFFECT_URL + '"') if START_EFFECT_URL else 'null'},
+            COUNTDOWN_EFFECT_URL: {('"' + COUNTDOWN_EFFECT_URL + '"') if COUNTDOWN_EFFECT_URL else 'null'},
+            JUMP_EFFECT_URL: {('"' + JUMP_EFFECT_URL + '"') if JUMP_EFFECT_URL else 'null'},
+            SCORE_EFFECT_URL: {('"' + SCORE_EFFECT_URL + '"') if SCORE_EFFECT_URL else 'null'},
+            HIGHSCORE_EFFECT_URL: {('"' + HIGHSCORE_EFFECT_URL + '"') if HIGHSCORE_EFFECT_URL else 'null'},
+            RANDOM_EFFECT_URL: {('"' + RANDOM_EFFECT_URL + '"') if RANDOM_EFFECT_URL else 'null'},
+            ELIMINATION_EFFECT_URL: {('"' + ELIMINATION_EFFECT_URL + '"') if ELIMINATION_EFFECT_URL else 'null'},
+            
+            // Game Settings
             GAME_SPEED: {game_speed},
             GRAVITY: {gravity_strength},
             JUMP_POWER: -{jump_power},
@@ -424,9 +469,19 @@ game_html = f'''
 
         // Game State
         let gameState = {{
+            // Audio objects
             menuAudio: null,
             ingameAudio: null,
             gameoverAudio: null,
+            startEffect: null,
+            countdownEffect: null,
+            jumpEffect: null,
+            scoreEffect: null,
+            highscoreEffect: null,
+            randomEffect: null,
+            eliminationEffect: null,
+            
+            // Game state
             musicEnabled: true,
             gameRunning: false,
             gameOver: false,
@@ -437,7 +492,8 @@ game_html = f'''
             lastTime: performance.now(),
             images: {{ bg: null, player: null, pipe: null }},
             countdownActive: false,
-            countdownValue: 3
+            countdownValue: 3,
+            currentAudio: null
         }};
 
         // DOM Elements
@@ -451,7 +507,8 @@ game_html = f'''
             musicToggle: document.getElementById('musicToggle'),
             startBtn: document.getElementById('startBtn'),
             mainStartBtn: document.getElementById('mainStartBtn'),
-            restartBtn: document.getElementById('restartBtn')
+            restartBtn: document.getElementById('restartBtn'),
+            audioStatus: document.getElementById('audioStatus')
         }};
 
         const ctx = elements.canvas.getContext('2d');
@@ -463,6 +520,7 @@ game_html = f'''
             setupAudio();
             resizeCanvas();
             renderMenu();
+            startMenuMusic();
         }}
 
         // Setup Event Listeners
@@ -489,21 +547,52 @@ game_html = f'''
             }}, {{passive: false}});
         }}
 
-        // Audio Management
+        // Audio Management - FIXED: No mixing of music
         function setupAudio() {{
+            // Background Music
             if (CONFIG.MENU_MUSIC_URL) {{
                 gameState.menuAudio = new Audio(CONFIG.MENU_MUSIC_URL);
                 gameState.menuAudio.loop = true;
-                gameState.menuAudio.volume = 0.4;
+                gameState.menuAudio.volume = 0.5;
             }}
             if (CONFIG.INGAME_MUSIC_URL) {{
                 gameState.ingameAudio = new Audio(CONFIG.INGAME_MUSIC_URL);
                 gameState.ingameAudio.loop = true;
-                gameState.ingameAudio.volume = 0.4;
+                gameState.ingameAudio.volume = 0.5;
             }}
             if (CONFIG.GAMEOVER_MUSIC_URL) {{
                 gameState.gameoverAudio = new Audio(CONFIG.GAMEOVER_MUSIC_URL);
-                gameState.gameoverAudio.volume = 0.4;
+                gameState.gameoverAudio.volume = 0.5;
+            }}
+
+            // Sound Effects
+            if (CONFIG.START_EFFECT_URL) {{
+                gameState.startEffect = new Audio(CONFIG.START_EFFECT_URL);
+                gameState.startEffect.volume = 0.7;
+            }}
+            if (CONFIG.COUNTDOWN_EFFECT_URL) {{
+                gameState.countdownEffect = new Audio(CONFIG.COUNTDOWN_EFFECT_URL);
+                gameState.countdownEffect.volume = 0.7;
+            }}
+            if (CONFIG.JUMP_EFFECT_URL) {{
+                gameState.jumpEffect = new Audio(CONFIG.JUMP_EFFECT_URL);
+                gameState.jumpEffect.volume = 0.6;
+            }}
+            if (CONFIG.SCORE_EFFECT_URL) {{
+                gameState.scoreEffect = new Audio(CONFIG.SCORE_EFFECT_URL);
+                gameState.scoreEffect.volume = 0.7;
+            }}
+            if (CONFIG.HIGHSCORE_EFFECT_URL) {{
+                gameState.highscoreEffect = new Audio(CONFIG.HIGHSCORE_EFFECT_URL);
+                gameState.highscoreEffect.volume = 0.7;
+            }}
+            if (CONFIG.RANDOM_EFFECT_URL) {{
+                gameState.randomEffect = new Audio(CONFIG.RANDOM_EFFECT_URL);
+                gameState.randomEffect.volume = 0.6;
+            }}
+            if (CONFIG.ELIMINATION_EFFECT_URL) {{
+                gameState.eliminationEffect = new Audio(CONFIG.ELIMINATION_EFFECT_URL);
+                gameState.eliminationEffect.volume = 0.7;
             }}
 
             // Load music preference
@@ -511,6 +600,72 @@ game_html = f'''
                 const saved = localStorage.getItem('flappy_music_enabled');
                 if (saved !== null) gameState.musicEnabled = saved === '1';
                 updateMusicButton();
+            }} catch (e) {{}}
+        }}
+
+        function stopAllBackgroundMusic() {{
+            if (gameState.menuAudio) {{
+                gameState.menuAudio.pause();
+                gameState.menuAudio.currentTime = 0;
+            }}
+            if (gameState.ingameAudio) {{
+                gameState.ingameAudio.pause();
+                gameState.ingameAudio.currentTime = 0;
+            }}
+            if (gameState.gameoverAudio) {{
+                gameState.gameoverAudio.pause();
+                gameState.gameoverAudio.currentTime = 0;
+            }}
+        }}
+
+        function startMenuMusic() {{
+            if (!gameState.musicEnabled) return;
+            stopAllBackgroundMusic();
+            if (gameState.menuAudio) {{
+                gameState.menuAudio.play().catch(() => {{}});
+                gameState.currentAudio = 'menu';
+                elements.audioStatus.textContent = '🎵 Menu Music';
+            }}
+        }}
+
+        function startGameMusic() {{
+            if (!gameState.musicEnabled) return;
+            stopAllBackgroundMusic();
+            if (gameState.ingameAudio) {{
+                gameState.ingameAudio.play().catch(() => {{}});
+                gameState.currentAudio = 'ingame';
+                elements.audioStatus.textContent = '🎮 Game Music';
+            }}
+        }}
+
+        function startGameOverMusic() {{
+            if (!gameState.musicEnabled) return;
+            stopAllBackgroundMusic();
+            if (gameState.gameoverAudio) {{
+                gameState.gameoverAudio.play().catch(() => {{}});
+                gameState.currentAudio = 'gameover';
+                elements.audioStatus.textContent = '💀 Game Over Music';
+            }}
+        }}
+
+        function playSoundEffect(audio, type = 'random') {{
+            if (!gameState.musicEnabled || !audio) return;
+            try {{
+                audio.currentTime = 0;
+                audio.play().catch(() => {{}});
+                if (type !== 'random') {{
+                    elements.audioStatus.textContent = `🔊 ${{type}} Effect`;
+                    setTimeout(() => {{
+                        // Restore current music status after effect
+                        if (gameState.currentAudio === 'menu') {{
+                            elements.audioStatus.textContent = '🎵 Menu Music';
+                        }} else if (gameState.currentAudio === 'ingame') {{
+                            elements.audioStatus.textContent = '🎮 Game Music';
+                        }} else if (gameState.currentAudio === 'gameover') {{
+                            elements.audioStatus.textContent = '💀 Game Over Music';
+                        }}
+                    }}, 2000);
+                }}
             }} catch (e) {{}}
         }}
 
@@ -522,32 +677,22 @@ game_html = f'''
             }} catch (e) {{}}
 
             if (!gameState.musicEnabled) {{
-                stopAllAudio();
+                stopAllBackgroundMusic();
+                elements.audioStatus.textContent = '🔇 Music Off';
             }} else {{
-                playCurrentAudio();
+                // Restore appropriate music based on current state
+                if (gameState.gameOver) {{
+                    startGameOverMusic();
+                }} else if (gameState.gameRunning) {{
+                    startGameMusic();
+                }} else {{
+                    startMenuMusic();
+                }}
             }}
         }}
 
         function updateMusicButton() {{
-            elements.musicToggle.textContent = gameState.musicEnabled ? '🔊 Music' : '🔇 Music';
-        }}
-
-        function stopAllAudio() {{
-            if (gameState.menuAudio) gameState.menuAudio.pause();
-            if (gameState.ingameAudio) gameState.ingameAudio.pause();
-            if (gameState.gameoverAudio) gameState.gameoverAudio.pause();
-        }}
-
-        function playCurrentAudio() {{
-            if (!gameState.musicEnabled) return;
-            
-            if (gameState.gameOver && gameState.gameoverAudio) {{
-                gameState.gameoverAudio.play().catch(() => {{}});
-            }} else if (gameState.gameRunning && gameState.ingameAudio) {{
-                gameState.ingameAudio.play().catch(() => {{}});
-            }} else if (gameState.menuAudio) {{
-                gameState.menuAudio.play().catch(() => {{}});
-            }}
+            elements.musicToggle.textContent = gameState.musicEnabled ? '🔊 Music ON' : '🔇 Music OFF';
         }}
 
         // Asset Loading
@@ -576,7 +721,8 @@ game_html = f'''
             gameState.gameRunning = true;
             gameState.gameOver = false;
             
-            if (gameState.menuAudio) gameState.menuAudio.pause();
+            // Play start effect
+            playSoundEffect(gameState.startEffect, 'Game Start');
             
             startCountdown();
         }}
@@ -587,9 +733,17 @@ game_html = f'''
             elements.countdown.style.display = 'block';
             elements.countdown.textContent = gameState.countdownValue;
 
+            // Play countdown effect for first number
+            playSoundEffect(gameState.countdownEffect, 'Countdown');
+
             const countdownInterval = setInterval(() => {{
                 gameState.countdownValue--;
                 elements.countdown.textContent = gameState.countdownValue;
+
+                // Play countdown effect for each number
+                if (gameState.countdownValue > 0) {{
+                    playSoundEffect(gameState.countdownEffect, 'Countdown');
+                }}
 
                 if (gameState.countdownValue <= 0) {{
                     clearInterval(countdownInterval);
@@ -597,9 +751,10 @@ game_html = f'''
                     gameState.countdownActive = false;
                     resetGame();
                     gameState.lastTime = performance.now();
-                    if (gameState.musicEnabled && gameState.ingameAudio) {{
-                        gameState.ingameAudio.play().catch(() => {{}});
-                    }}
+                    
+                    // Start game music after countdown
+                    startGameMusic();
+                    
                     requestAnimationFrame(gameLoop);
                 }}
             }}, 1000);
@@ -614,15 +769,14 @@ game_html = f'''
             gameState.gameRunning = false;
             gameState.gameOver = true;
 
-            if (gameState.ingameAudio) gameState.ingameAudio.pause();
+            // Play elimination effect
+            playSoundEffect(gameState.eliminationEffect, 'Game Over');
             
             elements.finalScore.textContent = gameState.score;
             elements.gameOverScreen.style.display = 'flex';
 
-            if (gameState.musicEnabled && gameState.gameoverAudio) {{
-                gameState.gameoverAudio.currentTime = 0;
-                gameState.gameoverAudio.play().catch(() => {{}});
-            }}
+            // Start game over music
+            startGameOverMusic();
 
             // Save best score
             try {{
@@ -704,6 +858,13 @@ game_html = f'''
                     pipe.scored = true;
                     gameState.score++;
                     elements.score.textContent = gameState.score;
+                    
+                    // Play score effect based on score range
+                    if (gameState.score <= 5) {{
+                        playSoundEffect(gameState.scoreEffect, 'Score');
+                    }} else {{
+                        playSoundEffect(gameState.highscoreEffect, 'High Score');
+                    }}
                 }}
 
                 // Collision detection
@@ -721,133 +882,4 @@ game_html = f'''
             return rect1.x < rect2.x + rect2.width &&
                    rect1.x + rect1.width > rect2.x &&
                    rect1.y < rect2.y + rect2.height &&
-                   rect1.y + rect1.height > rect2.y;
-        }}
-
-        function flap() {{
-            if (!gameState.gameRunning || gameState.gameOver || gameState.countdownActive) return;
-            gameState.player.vy = CONFIG.JUMP_POWER;
-        }}
-
-        // Rendering
-        function render() {{
-            // Clear canvas
-            ctx.fillStyle = '#000';
-            ctx.fillRect(0, 0, elements.canvas.width, elements.canvas.height);
-
-            // Draw background
-            if (gameState.images.bg) {{
-                ctx.drawImage(gameState.images.bg, 0, 0, elements.canvas.width, elements.canvas.height);
-            }} else {{
-                const gradient = ctx.createLinearGradient(0, 0, elements.canvas.width, elements.canvas.height);
-                gradient.addColorStop(0, '#1e3c72');
-                gradient.addColorStop(1, '#2a5298');
-                ctx.fillStyle = gradient;
-                ctx.fillRect(0, 0, elements.canvas.width, elements.canvas.height);
-            }}
-
-            // Draw pipes
-            gameState.pipes.forEach(pipe => {{
-                const pipeWidth = elements.canvas.width * 0.08;
-                const topHeight = pipe.center - (CONFIG.PIPE_GAP / 2);
-
-                if (gameState.images.pipe) {{
-                    ctx.drawImage(gameState.images.pipe, pipe.x, 0, pipeWidth, topHeight);
-                    ctx.drawImage(gameState.images.pipe, pipe.x, pipe.center + (CONFIG.PIPE_GAP / 2), pipeWidth, elements.canvas.height - (pipe.center + (CONFIG.PIPE_GAP / 2)));
-                }} else {{
-                    const pipeGradient = ctx.createLinearGradient(pipe.x, 0, pipe.x + pipeWidth, 0);
-                    pipeGradient.addColorStop(0, '#2ecc71');
-                    pipeGradient.addColorStop(1, '#27ae60');
-                    ctx.fillStyle = pipeGradient;
-                    ctx.fillRect(pipe.x, 0, pipeWidth, topHeight);
-                    ctx.fillRect(pipe.x, pipe.center + (CONFIG.PIPE_GAP / 2), pipeWidth, elements.canvas.height - (pipe.center + (CONFIG.PIPE_GAP / 2)));
-                }}
-            }});
-
-            // Draw player
-            if (gameState.images.player) {{
-                ctx.drawImage(gameState.images.player, gameState.player.x, gameState.player.y, gameState.player.size, gameState.player.size);
-            }} else {{
-                ctx.fillStyle = '#f1c40f';
-                ctx.fillRect(gameState.player.x, gameState.player.y, gameState.player.size, gameState.player.size);
-            }}
-        }}
-
-        function renderMenu() {{
-            render();
-        }}
-
-        // Game Loop
-        function gameLoop(currentTime) {{
-            const deltaTime = currentTime - gameState.lastTime;
-            gameState.lastTime = currentTime;
-
-            update(deltaTime);
-            render();
-
-            if (gameState.gameRunning && !gameState.gameOver) {{
-                requestAnimationFrame(gameLoop);
-            }}
-        }}
-
-        // Utility Functions
-        function resizeCanvas() {{
-            elements.canvas.width = Math.min(window.innerWidth * 0.95, 900);
-            elements.canvas.height = Math.min(window.innerHeight * 0.7, 600);
-            if (!gameState.gameRunning) {{
-                renderMenu();
-            }}
-        }}
-
-        // Start the game when page loads
-        window.addEventListener('load', initGame);
-    </script>
-</body>
-</html>
-'''
-
-# Render the game
-st.components.v1.html(game_html, height=800, scrolling=False)
-
-# Features Section
-st.markdown("---")
-st.markdown("## 🎯 Premium Features")
-
-col1, col2, col3 = st.columns(3)
-
-with col1:
-    st.markdown("""
-    ### 🎨 Visual Excellence
-    - **High-quality graphics**
-    - **Smooth animations** 
-    - **Character pop-up effects**
-    - **Professional UI/UX**
-    """)
-
-with col2:
-    st.markdown("""
-    ### 🎵 Audio Mastery
-    - **Menu music system**
-    - **In-game soundtrack**
-    - **Game-over music**
-    - **Audio controls**
-    """)
-
-with col3:
-    st.markdown("""
-    ### ⚡ Game Enhancements
-    - **3-second countdown**
-    - **Customizable difficulty**
-    - **Score tracking**
-    - **Responsive design**
-    """)
-
-st.markdown("---")
-st.markdown("### 🎮 How to Play")
-st.markdown("""
-1. **Customize** your game using the sidebar options
-2. **Click START GAME** to begin with a 3-second countdown
-3. **Press SPACE, CLICK, or ARROW UP** to make the bird jump
-4. **Avoid obstacles** and score points
-5. **Enjoy** your customized gaming experience!
-""")
+                   rect1.y
